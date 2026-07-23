@@ -1,0 +1,26 @@
+From: Codex <codex@openai.com>
+Subject: [PATCH] wifi: ath12k: accept QCN9274 direct-buffer capability
+
+QCN9274 firmware advertises the CV upload direct-buffer module during the
+service-ready event.  The upstream enum stopped at spectral and CFR, causing
+the capability parser to reject the whole TLV with "Invalid module id 2".
+Accept the firmware-defined module IDs so WMI initialization continues with
+the advertised capabilities intact.
+
+Signed-off-by: Codex <codex@openai.com>
+---
+ drivers/net/wireless/ath/ath12k/wmi.h | 2 ++
+ 1 file changed, 2 insertions(+)
+
+--- a/drivers/net/wireless/ath/ath12k/wmi.h
++++ b/drivers/net/wireless/ath/ath12k/wmi.h
+@@ -2330,5 +2330,7 @@ enum wmi_direct_buffer_module {
+ 	WMI_DIRECT_BUF_SPECTRAL = 0,
+ 	WMI_DIRECT_BUF_CFR = 1,
++	WMI_CONFIG_MODULE_CV_UPLOAD = 2,
++	WMI_CONFIG_MODULE_WIFI_RADAR = 3,
+ 
+ 	/* keep it last */
+ 	WMI_DIRECT_BUF_MAX
+-- 
+2.43.0

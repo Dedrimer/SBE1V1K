@@ -1,0 +1,30 @@
+From: Codex <codex@openai.com>
+Date: Wed, 22 Jul 2026 23:15:00 +0800
+Subject: [PATCH] wifi: ath12k: expand PPE direct-switch TX pool
+
+Match the QSDK default direct-switch TX descriptor count.  The PPE WBM
+completion ring already contains 32768 entries, but a pool of only 8192
+descriptors can starve PPE2TCL well before the completion ring reaches its
+designed capacity under high-rate downlink traffic.
+
+The cookie format provides 11 page bits and each SPT page contains 512
+entries, so the resulting 64 pages remain within the hardware encoding.
+
+Signed-off-by: Codex <codex@openai.com>
+---
+ drivers/net/wireless/ath/ath12k/dp.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+--- a/drivers/net/wireless/ath/ath12k/dp.h
++++ b/drivers/net/wireless/ath/ath12k/dp.h
+@@ -204,7 +204,7 @@ struct ath12k_pdev_dp {
+ #define DP_PPE2TCL_RING_SIZE		8192
+ #define DP_REO2PPE_RING_SIZE		16384
+ #define DP_PPE_WBM2SW_RING_SIZE		32768
+-#define DP_PPE_DS_TX_DESC_COUNT		8192
++#define DP_PPE_DS_TX_DESC_COUNT		32768
+ #define HAL_REO2PPE_DST_IND		6
+ #define DP_PPE_DS_TX_SPT_PAGES		(DP_PPE_DS_TX_DESC_COUNT / \
+ 					 ATH12K_MAX_SPT_ENTRIES)
+-- 
+2.43.0

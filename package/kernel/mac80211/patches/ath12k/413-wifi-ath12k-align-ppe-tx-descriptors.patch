@@ -1,0 +1,42 @@
+From: Codex <codex@openai.com>
+Date: Wed, 22 Jul 2026 23:30:00 +0800
+Subject: [PATCH] wifi: ath12k: align PPE direct-switch TX descriptors
+
+Keep each PPE TX software descriptor within one 64-byte cache line.  The
+descriptor array is walked at line rate by the refill and WBM completion
+paths; a 48-byte stride otherwise makes adjacent entries share and cross
+cache lines.  This matches the QSDK direct-switch layout for QCN9274.
+
+Signed-off-by: Codex <codex@openai.com>
+---
+ drivers/net/wireless/ath/ath12k/dp.h | 17 +++++++++++------
+ 1 file changed, 11 insertions(+), 6 deletions(-)
+
+--- a/drivers/net/wireless/ath/ath12k/dp.h
++++ b/drivers/net/wireless/ath/ath12k/dp.h
+@@ -346,12 +346,17 @@ struct ath12k_tx_desc_info {
+ 
+ #ifdef CPTCFG_ATH12K_PPE_DS_SUPPORT
+ struct ath12k_ppe_ds_tx_desc {
+-	struct list_head list;
+-	struct sk_buff *skb;
+-	dma_addr_t paddr;
+-	u32 cookie;
+-	u32 dma_len;
+-	bool in_use;
++	union {
++		u8 cacheline[64];
++		struct {
++			struct list_head list;
++			struct sk_buff *skb;
++			dma_addr_t paddr;
++			u32 cookie;
++			u32 dma_len;
++			bool in_use;
++		};
++	};
+ };
+ 
+ struct ath12k_ppe_ds_stats {
+-- 
+2.43.0

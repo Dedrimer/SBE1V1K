@@ -1,0 +1,31 @@
+From: Codex <codex@openai.com>
+Date: Wed, 22 Jul 2026 18:20:00 +0800
+Subject: [PATCH] net: ethernet: qualcomm: ppe: remove unused platform device
+
+EDMA IRQ discovery uses the ethernet device's child node and
+of_irq_get_byname().  The old platform-device conversion is no longer
+used and fails W=1 builds with an unused-but-set-variable error.
+
+Remove the dead variable and assignment without changing IRQ lookup.
+
+Signed-off-by: Codex <codex@openai.com>
+---
+ drivers/net/ethernet/qualcomm/ppe/edma.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+--- a/drivers/net/ethernet/qualcomm/ppe/edma.c
++++ b/drivers/net/ethernet/qualcomm/ppe/edma.c
+@@ -513,11 +513,9 @@ static int edma_irq_configure(void)
+ 	struct edma_ring_info *rx = hw_info->rx;
+ 	char edma_irq_name[EDMA_IRQ_NAME_SIZE];
+ 	struct device *dev = ppe_dev->dev;
+-	struct platform_device *pdev;
+ 	struct device_node *edma_np;
+ 	u32 i;
+ 
+-	pdev = to_platform_device(dev);
+ 	edma_np = of_get_child_by_name(dev->of_node, EDMA_NODE_NAME);
+ 	edma_ctx->intr_info.intr_txcmpl = kzalloc((sizeof(*edma_ctx->intr_info.intr_txcmpl) *
+ 						  txcmpl->num_rings), GFP_KERNEL);
+-- 
+2.43.0
