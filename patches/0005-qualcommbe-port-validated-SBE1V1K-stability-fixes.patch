@@ -1,0 +1,436 @@
+From d1188699b7e7d81c23cbb39b7c3ab9959341d25a Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Date: Sat, 1 Aug 2026 23:23:49 +0800
+Subject: [PATCH 5/8] qualcommbe: port validated SBE1V1K stability fixes
+
+---
+ VALIDATION-CODEX-20260801.md                  |  40 ++++++
+ .../lib/netifd/wireless/mac80211.sh           | 120 ++++++++++++++++--
+ .../files/lib/netifd/wireless/mac80211.sh     |  19 ++-
+ .../usr/share/hostap/resolve-radio-index.uc   |  45 +++++++
+ sbe1v1k-tests/test-upgrade-validation.sh      |  40 ++++++
+ .../ipq95xx/base-files/etc/board.d/02_network |   3 +
+ .../base-files/lib/upgrade/platform.sh        |  30 ++++-
+ 7 files changed, 281 insertions(+), 16 deletions(-)
+ create mode 100644 VALIDATION-CODEX-20260801.md
+ create mode 100644 package/network/config/wifi-scripts/files/usr/share/hostap/resolve-radio-index.uc
+ create mode 100644 sbe1v1k-tests/test-upgrade-validation.sh
+
+diff --git a/VALIDATION-CODEX-20260801.md b/VALIDATION-CODEX-20260801.md
+new file mode 100644
+index 0000000000..db1cb8934b
+--- /dev/null
++++ b/VALIDATION-CODEX-20260801.md
+@@ -0,0 +1,40 @@
++# SBE1V1K Codex Stable Preview 2 Validation
++
++## Fixes verified
++
++- The SBE1V1K board defaults now provide the `US` regulatory domain.
++  Fresh wireless configuration therefore no longer writes the invalid
++  `country_code=00` which made hostapd reject all three APs.
++- The mac80211 ucode backend resolves the current ath12k radio index from
++  the requested 2.4, 5, or 6 GHz frequency range on every setup.
++- hostapd setup is serialized when several radios share one wiphy.  The
++  per-PHY runtime lock remains held for four seconds after each setup so
++  ath12k can finish vdev startup before the next band is configured.
++
++## Hardware regression test
++
++Tested on the flashed Askey SBE1V1K through wired SSH:
++
++- 5 consecutive `wifi reload` cycles completed.
++- Every cycle reported 3 hostapd ubus objects and 3 active SSIDs.
++- No new `failed to start vdev`, `Interface initialization failed`,
++  `hostapd.add_iface failed`, or `Failed to set beacon parameters` event.
++- Final frequencies were 2412 MHz, 5180 MHz, and 5955 MHz.
++
++## Image checks
++
++- All entries in `sha256sums` passed.
++- Sysupgrade tar contains `CONTROL`, `kernel`, and `root`.
++- The negative validator rejected truncated and missing-root archives.
++- SquashFS extraction confirmed the Preview 2 release marker, `US` board
++  default, and multi-radio setup lock in the actual root payload.
++- FIT inspection confirmed Linux 6.18.39, the SBE1V1K DTB, and default
++  configuration `config@rtq7300t-rev0`.
++
++## Primary image
++
++`openwrt-qualcommbe-ipq95xx-askey_sbe1v1k-squashfs-sysupgrade.bin`
++
++SHA-256:
++
++`09967f4742c9d428b1e3644e71ce936df440282edf9a80773eb65a5428ed339e`
+diff --git a/package/network/config/wifi-scripts/files-ucode/lib/netifd/wireless/mac80211.sh b/package/network/config/wifi-scripts/files-ucode/lib/netifd/wireless/mac80211.sh
+index fa924cb1db..cfbf83eed5 100755
+--- a/package/network/config/wifi-scripts/files-ucode/lib/netifd/wireless/mac80211.sh
++++ b/package/network/config/wifi-scripts/files-ucode/lib/netifd/wireless/mac80211.sh
+@@ -31,6 +31,92 @@ function phy_suffix(radio, sep) {
+ 	return sep + radio;
+ }
+ 
++const radio_band_ranges = {
++	'2g': [ 2400000, 2500000 ],
++	'5g': [ 4900000, 5924999 ],
++	'6g': [ 5925000, 7125000 ]
++};
++
++function resolve_radio_index(phy_name, band_name, fallback) {
++	let wanted = radio_band_ranges[band_name];
++	if (!wanted)
++		return fallback;
++
++	let phys = nl80211.request(
++		nl80211.const.NL80211_CMD_GET_WIPHY,
++		nl80211.const.NLM_F_DUMP,
++		{ split_wiphy_dump: true }
++	);
++
++	for (let phy in phys ?? []) {
++		if (!phy || phy.wiphy_name != phy_name)
++			continue;
++
++		for (let radio in phy.radios ?? []) {
++			for (let range in radio.freq_ranges ?? []) {
++				if (range.end < wanted[0] || range.start > wanted[1])
++					continue;
++
++				return radio.index;
++			}
++		}
++	}
++
++	return fallback;
++}
++
++function phy_has_multiple_radios(phy_name) {
++	let phys = nl80211.request(
++		nl80211.const.NL80211_CMD_GET_WIPHY,
++		nl80211.const.NLM_F_DUMP,
++		{ split_wiphy_dump: true }
++	);
++
++	for (let phy in phys ?? [])
++		if (phy?.wiphy_name == phy_name)
++			return length(phy.radios ?? []) > 1;
++
++	return false;
++}
++
++function acquire_phy_setup_lock(phy_name) {
++	if (!match(phy_name, /^[A-Za-z0-9_.-]+$/) || !phy_has_multiple_radios(phy_name))
++		return null;
++
++	let path = `/var/run/wifi-${phy_name}.setup-lock`;
++
++	for (let attempt = 0; attempt < 30; attempt++) {
++		if (!system(`mkdir ${path} 2>/dev/null`)) {
++			log(`Acquired multi-radio setup lock for ${phy_name}`);
++			return path;
++		}
++
++		system('sleep 1');
++	}
++
++	// A handler which is killed while holding the lock cannot clean it up.
++	// After a bounded wait, remove only this per-PHY runtime directory and
++	// make one final acquisition attempt.  /var/run is cleared on reboot.
++	log(`Removing stale multi-radio setup lock for ${phy_name}`);
++	system(`rmdir ${path} 2>/dev/null`);
++
++	if (!system(`mkdir ${path} 2>/dev/null`))
++		return path;
++
++	log(`Unable to serialize multi-radio setup for ${phy_name}`);
++	return null;
++}
++
++function release_phy_setup_lock(path) {
++	if (!path)
++		return;
++
++	// hostapd returns before ath12k has necessarily completed vdev startup.
++	// Keep other radios off the shared wiphy until the firmware settles.
++	system('sleep 4');
++	system(`rmdir ${path} 2>/dev/null`);
++}
++
+ function reset_config(phy, radio) {
+ 	let name = phy + phy_suffix(radio, ".");
+ 	let prev_config = `/var/run/hostapd-${name}.conf`;
+@@ -70,9 +156,9 @@ function setup_phy(phy, config, data) {
+ 	config.channel = +config.channel;
+ 	config.frequency = get_channel_frequency(config.band, config.channel);
+ 
+-	if (config.country) {
+-		log(`Setting country code to ${config.country}`);
+-		system(`iw reg set ${config.country}`);
++	if (config.country_code) {
++		log(`Setting country code to ${config.country_code}`);
++		system(`iw reg set ${config.country_code}`);
+ 	}
+ 
+ 	set_default(config, 'rxantenna', 0xffffffff);
+@@ -171,14 +257,6 @@ function setup() {
+ 		netifd.set_retry(false);
+ 		return 1;
+ 	}
+-	data.phy_suffix = phy_suffix(data.config.radio, ":");
+-	data.vif_phy_suffix = phy_suffix(data.config.radio, ".");
+-	data.ifname_prefix = data.config.ifname_prefix;
+-	if (!data.ifname_prefix)
+-		data.ifname_prefix = data.phy + data.vif_phy_suffix + "-";
+-	let active_ifnames = [];
+-
+-	log('Starting');
+ 
+ 	let config = data.config;
+ 
+@@ -203,6 +281,19 @@ function setup() {
+ 	}
+ 	delete config.hwmode;
+ 
++	// ath12k may expose all three bands through one wiphy.  The numeric
++	// radio indices are not stable across boots, so bind the configured
++	// band to the radio currently advertising that frequency range.
++	config.radio = resolve_radio_index(data.phy, config.band, config.radio);
++	data.phy_suffix = phy_suffix(config.radio, ":");
++	data.vif_phy_suffix = phy_suffix(config.radio, ".");
++	data.ifname_prefix = config.ifname_prefix;
++	if (!data.ifname_prefix)
++		data.ifname_prefix = data.phy + data.vif_phy_suffix + "-";
++	let active_ifnames = [];
++
++	log(`Starting ${data.phy}, radio ${config.radio}, band ${config.band}`);
++
+ 	validate('device', config);
+ 	setup_phy(data.phy, data.config, data.data);
+ 
+@@ -256,6 +347,7 @@ function setup() {
+ 			// fallthrough
+ 		case 'sta':
+ 			data.ap_start_disabled = true;
++			data.channel_follow = true;
+ 			let config = supplicant.generate(supplicant_data, data, v);
+ 			if (mode == "mesh")
+ 				config_add_mesh_params(config, v.config);
+@@ -306,9 +398,15 @@ function setup() {
+ 	if (fs.access('/usr/sbin/wpa_supplicant', 'x'))
+ 		supplicant.setup(supplicant_data, data);
+ 
++	let phy_setup_lock;
++	if (fs.access('/usr/sbin/hostapd', 'x'))
++		phy_setup_lock = acquire_phy_setup_lock(data.phy);
++
+ 	if (fs.access('/usr/sbin/hostapd', 'x'))
+ 		hostapd.setup(data);
+ 
++	release_phy_setup_lock(phy_setup_lock);
++
+ 	if (length(supplicant_data) > 0)
+ 		supplicant.start(data);
+ 
+diff --git a/package/network/config/wifi-scripts/files/lib/netifd/wireless/mac80211.sh b/package/network/config/wifi-scripts/files/lib/netifd/wireless/mac80211.sh
+index 48c0a36bb3..a56a500d90 100755
+--- a/package/network/config/wifi-scripts/files/lib/netifd/wireless/mac80211.sh
++++ b/package/network/config/wifi-scripts/files/lib/netifd/wireless/mac80211.sh
+@@ -144,7 +144,7 @@ mac80211_hostapd_setup_base() {
+ 	[ -n "$acs_exclude_dfs" ] && [ "$acs_exclude_dfs" -gt 0 ] &&
+ 		append base_cfg "acs_exclude_dfs=1" "$N"
+ 
+-	json_get_vars noscan ht_coex min_tx_power:0 tx_burst vendor_vht
++	json_get_vars noscan ht_coex min_tx_power:0 tx_burst
+ 	json_get_values ht_capab_list ht_capab
+ 	json_get_values channel_list channels
+ 
+@@ -317,7 +317,7 @@ mac80211_hostapd_setup_base() {
+ 	[ "$hwmode" = "a" ] || enable_ac=0
+ 	[ "$band" = "6g" ] && enable_ac=0
+ 
+-	if [ "$enable_ac" != "0" -o "$vendor_vht" = "1" ]; then
++	if [ "$enable_ac" != "0" ]; then
+ 		json_get_vars \
+ 			rxldpc:1 \
+ 			short_gi_80:1 \
+@@ -1161,8 +1161,6 @@ drv_mac80211_setup() {
+ 	json_get_values scan_list scan_list
+ 	json_select ..
+ 
+-	mac80211_set_suffix
+-
+ 	json_select data && {
+ 		json_get_var prev_rxantenna rxantenna
+ 		json_get_var prev_txantenna txantenna
+@@ -1175,6 +1173,19 @@ drv_mac80211_setup() {
+ 		return 1
+ 	}
+ 
++	# A single ath12k wiphy can expose multiple hardware radios.  Their
++	# numeric indices are not guaranteed to remain stable across boots, so
++	# resolve the configured band to the radio advertised by nl80211 now.
++	# The helper falls back to the configured index on older drivers.
++	if [ -n "$radio" ] && [ -n "$band" ]; then
++		local resolved_radio
++		resolved_radio="$(ucode /usr/share/hostap/resolve-radio-index.uc \
++			"$phy" "$band" "$radio" 2>/dev/null)"
++		[ -n "$resolved_radio" ] && radio="$resolved_radio"
++	fi
++
++	mac80211_set_suffix
++
+ 	set_default ifname_prefix "$phy$vif_phy_suffix-"
+ 
+ 	local wdev
+diff --git a/package/network/config/wifi-scripts/files/usr/share/hostap/resolve-radio-index.uc b/package/network/config/wifi-scripts/files/usr/share/hostap/resolve-radio-index.uc
+new file mode 100644
+index 0000000000..04366b6363
+--- /dev/null
++++ b/package/network/config/wifi-scripts/files/usr/share/hostap/resolve-radio-index.uc
+@@ -0,0 +1,45 @@
++#!/usr/bin/env ucode
++'use strict';
++
++let nl = require('nl80211');
++
++let phy_name = shift(ARGV);
++let band_name = lc(shift(ARGV) ?? '');
++let fallback = shift(ARGV);
++
++const band_ranges = {
++	'2g': [ 2400000, 2500000 ],
++	'5g': [ 4900000, 5924999 ],
++	'6g': [ 5925000, 7125000 ]
++};
++
++function ranges_overlap(a, b) {
++	return a.end >= b[0] && a.start <= b[1];
++}
++
++let wanted = band_ranges[band_name];
++let phys = nl.request(
++	nl.const.NL80211_CMD_GET_WIPHY,
++	nl.const.NLM_F_DUMP,
++	{ split_wiphy_dump: true }
++);
++
++if (wanted && phys) {
++	for (let phy in phys) {
++		if (!phy || phy.wiphy_name != phy_name)
++			continue;
++
++		for (let radio in phy.radios ?? []) {
++			for (let range in radio.freq_ranges ?? []) {
++				if (!ranges_overlap(range, wanted))
++					continue;
++
++				print(`${radio.index}\n`);
++				exit(0);
++			}
++		}
++	}
++}
++
++if (fallback != null)
++	print(`${fallback}\n`);
+diff --git a/sbe1v1k-tests/test-upgrade-validation.sh b/sbe1v1k-tests/test-upgrade-validation.sh
+new file mode 100644
+index 0000000000..0545f600f0
+--- /dev/null
++++ b/sbe1v1k-tests/test-upgrade-validation.sh
+@@ -0,0 +1,40 @@
++#!/bin/sh
++set -eu
++
++repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
++work_dir="$(mktemp -d)"
++trap 'rm -rf -- "$work_dir"' EXIT INT TERM
++
++board_name() {
++	echo 'askey,sbe1v1k'
++}
++
++. "$repo_root/target/linux/qualcommbe/ipq95xx/base-files/lib/upgrade/platform.sh"
++
++if [ "$#" -gt 0 ]; then
++	platform_check_image "$1"
++	echo "built sysupgrade validation passed: $1"
++fi
++
++mkdir -p "$work_dir/sysupgrade-askey_sbe1v1k"
++printf 'BOARD=askey_sbe1v1k\n' > "$work_dir/sysupgrade-askey_sbe1v1k/CONTROL"
++dd if=/dev/zero of="$work_dir/sysupgrade-askey_sbe1v1k/kernel" bs=1024 count=16 2>/dev/null
++dd if=/dev/zero of="$work_dir/sysupgrade-askey_sbe1v1k/root" bs=1024 count=64 2>/dev/null
++tar -C "$work_dir" -cf "$work_dir/valid.bin" sysupgrade-askey_sbe1v1k
++
++platform_check_image "$work_dir/valid.bin"
++
++head -c 32768 "$work_dir/valid.bin" > "$work_dir/truncated.bin"
++if platform_check_image "$work_dir/truncated.bin"; then
++	echo 'ERROR: truncated archive was accepted' >&2
++	exit 1
++fi
++
++rm "$work_dir/sysupgrade-askey_sbe1v1k/root"
++tar -C "$work_dir" -cf "$work_dir/missing-root.bin" sysupgrade-askey_sbe1v1k
++if platform_check_image "$work_dir/missing-root.bin"; then
++	echo 'ERROR: archive without root payload was accepted' >&2
++	exit 1
++fi
++
++echo 'upgrade validation tests passed'
+diff --git a/target/linux/qualcommbe/ipq95xx/base-files/etc/board.d/02_network b/target/linux/qualcommbe/ipq95xx/base-files/etc/board.d/02_network
+index f0d77702c9..b11c5ec309 100644
+--- a/target/linux/qualcommbe/ipq95xx/base-files/etc/board.d/02_network
++++ b/target/linux/qualcommbe/ipq95xx/base-files/etc/board.d/02_network
+@@ -16,6 +16,9 @@ ipq95xx_setup_interfaces()
+ 		;;
+ 	askey,sbe1v1k)
+ 		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3" "wan"
++		# This stable-preview image is deployed on a US-region unit.  A valid
++		# country is required by hostapd, especially for 6 GHz operation.
++		ucidef_set_country "US"
+ 		;;
+ 	qcom,ipq9574-ap-al02-c7)
+ 		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4 lan5" "wan"
+diff --git a/target/linux/qualcommbe/ipq95xx/base-files/lib/upgrade/platform.sh b/target/linux/qualcommbe/ipq95xx/base-files/lib/upgrade/platform.sh
+index 03eadef67f..56ce9c0e35 100644
+--- a/target/linux/qualcommbe/ipq95xx/base-files/lib/upgrade/platform.sh
++++ b/target/linux/qualcommbe/ipq95xx/base-files/lib/upgrade/platform.sh
+@@ -5,7 +5,35 @@ RAMFS_COPY_BIN='fw_printenv fw_setenv head'
+ RAMFS_COPY_DATA='/etc/fw_env.config /var/lock/fw_printenv.lock'
+ 
+ platform_check_image() {
+-	return 0;
++	local image="$1"
++	local board_dir
++
++	case "$(board_name)" in
++	askey,sbe1v1k)
++		# emmc_do_upgrade() consumes a tar archive.  Validate the complete
++		# archive before entering the upgrade ramfs so a partial download
++		# cannot leave the kernel and rootfs at different revisions.
++		tar tf "$image" >/dev/null 2>&1 || {
++			echo "Invalid or truncated SBE1V1K sysupgrade archive"
++			return 1
++		}
++
++		board_dir="$(tar tf "$image" | sed -n 's#^\(sysupgrade-[^/]*/\)$#\1#p' | head -n 1)"
++		[ -n "$board_dir" ] || {
++			echo "SBE1V1K sysupgrade archive has no board directory"
++			return 1
++		}
++
++		for payload in CONTROL kernel root; do
++			tar tf "$image" "${board_dir}${payload}" >/dev/null 2>&1 || {
++				echo "SBE1V1K sysupgrade archive is missing ${payload}"
++				return 1
++			}
++		done
++		;;
++	esac
++
++	return 0
+ }
+ 
+ platform_do_upgrade() {

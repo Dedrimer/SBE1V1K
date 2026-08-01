@@ -1,0 +1,503 @@
+From b6e36cf270116f3ad50e4a66a354cbd5ad1b9712 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Date: Sat, 1 Aug 2026 23:27:36 +0800
+Subject: [PATCH 7/8] build: add SBE1V1K Nexus feature profile and safe
+ defaults
+
+---
+ README-SBE1V1K-NEXUS.md                 |  35 +++
+ README-SBE1V1K-NEXUS.zh-CN.md           |  34 +++
+ configs/sbe1v1k-nexus-mainline.config   | 361 ++++++++++++++++++++++++
+ files/etc/sbe1v1k-release               |  11 +-
+ files/etc/uci-defaults/99-sbe1v1k-nexus |  14 +
+ 5 files changed, 451 insertions(+), 4 deletions(-)
+ create mode 100644 README-SBE1V1K-NEXUS.md
+ create mode 100644 README-SBE1V1K-NEXUS.zh-CN.md
+ create mode 100644 configs/sbe1v1k-nexus-mainline.config
+ create mode 100755 files/etc/uci-defaults/99-sbe1v1k-nexus
+
+diff --git a/README-SBE1V1K-NEXUS.md b/README-SBE1V1K-NEXUS.md
+new file mode 100644
+index 0000000000..9337eca818
+--- /dev/null
++++ b/README-SBE1V1K-NEXUS.md
+@@ -0,0 +1,35 @@
++# SBE1V1K Nexus Firmware
++
++This branch keeps the applications and Argon interface from
++`naoki66/ImmortalWrt-for-Gemtek-XR1710G`, while replacing every hardware
++boundary with the validated Askey/Spectrum SBE1V1K port.
++
++## Safety boundary
++
++- Target: `qualcommbe/ipq95xx`, device `askey_sbe1v1k` only.
++- Hardware: Qualcomm IPQ9574 with three QCN9274 radios.
++- Storage: factory-compatible SBE1V1K eMMC layout.
++- Wi-Fi: the SBE1V1K BDF, ART calibration extraction, stable radio-index
++  resolver, serialized shared-wiphy startup, and US regulatory domain.
++- Upgrade: rejects a wrong model or incomplete archive before any write;
++  writes rootfs first and kernel last.
++- Excluded: XR1710G Airoha AN7581 DTS, MT7996 firmware, NPU, fan-control and
++  MLO packages. They are incompatible with this router.
++
++Optional proxy and DNS applications are included but disabled on first boot.
++No login or Wi-Fi password is embedded in published images.
++
++## Build
++
++```sh
++./scripts/feeds update -a
++./scripts/feeds install -a
++cp configs/sbe1v1k-nexus-mainline.config .config
++make defconfig
++make download -j8
++make -j$(nproc)
++```
++
++Use the generated `sysupgrade.bin` only from a currently running OpenWrt for
++SBE1V1K. Keep settings disabled for the first upgrade of a different firmware
++family.
+diff --git a/README-SBE1V1K-NEXUS.zh-CN.md b/README-SBE1V1K-NEXUS.zh-CN.md
+new file mode 100644
+index 0000000000..4415c9ecb2
+--- /dev/null
++++ b/README-SBE1V1K-NEXUS.zh-CN.md
+@@ -0,0 +1,34 @@
++# SBE1V1K Nexus 固件
++
++本分支保留 `naoki66/ImmortalWrt-for-Gemtek-XR1710G` 的应用功能和 Argon
++界面，但所有硬件边界均替换为已经在真机验证的 Askey/Spectrum SBE1V1K
++适配。
++
++## 安全边界
++
++- 目标仅为 `qualcommbe/ipq95xx` 的 `askey_sbe1v1k`。
++- 硬件为 Qualcomm IPQ9574 和三颗 QCN9274。
++- 使用兼容原厂的 SBE1V1K eMMC 分区布局。
++- Wi-Fi 使用本机 BDF、ART 校准提取、稳定 radio 序号解析、共享 wiphy
++  串行启动以及美国区域码。
++- 升级前严格校验机型及归档完整性；先写 rootfs，最后写 kernel，降低
++  意外中断时的变砖风险。
++- 不包含 XR1710G 专属的 Airoha AN7581 设备树、MT7996 固件、NPU、
++  风扇控制和 MLO 插件，这些组件与本机硬件不兼容。
++
++PassWall、OpenClash、AdGuardHome 等可选应用会预装，但首次启动默认
++禁用，配置完成后再手动启用。公开镜像不会预置登录密码或 Wi-Fi 密码。
++
++## 编译
++
++```sh
++./scripts/feeds update -a
++./scripts/feeds install -a
++cp configs/sbe1v1k-nexus-mainline.config .config
++make defconfig
++make download -j8
++make -j$(nproc)
++```
++
++从已经运行 SBE1V1K OpenWrt 的系统升级时使用 `sysupgrade.bin`。跨固件
++系列首次升级建议不保留配置。
+diff --git a/configs/sbe1v1k-nexus-mainline.config b/configs/sbe1v1k-nexus-mainline.config
+new file mode 100644
+index 0000000000..08a939c184
+--- /dev/null
++++ b/configs/sbe1v1k-nexus-mainline.config
+@@ -0,0 +1,361 @@
++CONFIG_LUCI_LANG_zh_Hans=y
++CONFIG_PACKAGE_adguardhome=y
++CONFIG_PACKAGE_apk-openssl=y
++CONFIG_PACKAGE_autocore=y
++CONFIG_PACKAGE_base-files=y
++CONFIG_PACKAGE_bash=y
++CONFIG_PACKAGE_busybox=y
++CONFIG_PACKAGE_ca-bundle=y
++CONFIG_PACKAGE_cgi-io=y
++CONFIG_PACKAGE_chinadns-ng=y
++CONFIG_PACKAGE_coreutils=y
++CONFIG_PACKAGE_coreutils-base64=y
++CONFIG_PACKAGE_coreutils-nohup=y
++CONFIG_PACKAGE_coreutils-timeout=y
++CONFIG_PACKAGE_cpufreq=y
++CONFIG_PACKAGE_curl=y
++CONFIG_PACKAGE_ddns-go=y
++CONFIG_PACKAGE_ddns-scripts=y
++CONFIG_PACKAGE_ddns-scripts-aliyun=y
++CONFIG_PACKAGE_ddns-scripts-cloudflare=y
++CONFIG_PACKAGE_ddns-scripts-dnspod=y
++CONFIG_PACKAGE_ddns-scripts-services=y
++CONFIG_PACKAGE_default-settings=y
++CONFIG_PACKAGE_default-settings-chn=y
++CONFIG_PACKAGE_dns2socks=y
++CONFIG_PACKAGE_dnsmasq_full_auth=y
++CONFIG_PACKAGE_dnsmasq_full_conntrack=y
++CONFIG_PACKAGE_dnsmasq_full_dhcp=y
++CONFIG_PACKAGE_dnsmasq_full_dhcpv6=y
++CONFIG_PACKAGE_dnsmasq_full_dnssec=y
++CONFIG_PACKAGE_dnsmasq_full_nftset=y
++CONFIG_PACKAGE_dnsmasq_full_noid=y
++CONFIG_PACKAGE_dnsmasq_full_tftp=y
++CONFIG_PACKAGE_dnsmasq-full=y
++CONFIG_PACKAGE_dropbear=y
++CONFIG_PACKAGE_etherwake=y
++CONFIG_PACKAGE_ethtool-full=y
++CONFIG_PACKAGE_firewall4=y
++CONFIG_PACKAGE_fitblk=y
++CONFIG_PACKAGE_fit-check-sign=y
++CONFIG_PACKAGE_fstools=y
++CONFIG_PACKAGE_fwtool=y
++CONFIG_PACKAGE_gawk=y
++CONFIG_PACKAGE_geoview=y
++CONFIG_PACKAGE_getrandom=y
++CONFIG_PACKAGE_haproxy=y
++CONFIG_PACKAGE_hostapd-common=y
++CONFIG_PACKAGE_igmpproxy=y
++CONFIG_PACKAGE_ip-bridge=y
++CONFIG_PACKAGE_iperf3=y
++CONFIG_PACKAGE_ip-full=y
++CONFIG_PACKAGE_ipt2socks=y
++CONFIG_PACKAGE_iputils-arping=y
++CONFIG_PACKAGE_iw=y
++CONFIG_PACKAGE_jansson=y
++CONFIG_PACKAGE_jq=y
++CONFIG_PACKAGE_jshn=y
++CONFIG_PACKAGE_jsonfilter=y
++CONFIG_PACKAGE_kmod-br-netfilter=y
++CONFIG_PACKAGE_kmod-cfg80211=y
++CONFIG_PACKAGE_kmod-crypto-aead=y
++CONFIG_PACKAGE_kmod-crypto-authenc=y
++CONFIG_PACKAGE_kmod-crypto-ccm=y
++CONFIG_PACKAGE_kmod-crypto-cmac=y
++CONFIG_PACKAGE_kmod-crypto-ctr=y
++CONFIG_PACKAGE_kmod-crypto-des=y
++CONFIG_PACKAGE_kmod-crypto-gcm=y
++CONFIG_PACKAGE_kmod-crypto-geniv=y
++CONFIG_PACKAGE_kmod-crypto-gf128=y
++CONFIG_PACKAGE_kmod-crypto-ghash=y
++CONFIG_PACKAGE_kmod-crypto-hash=y
++CONFIG_PACKAGE_kmod-crypto-hmac=y
++CONFIG_PACKAGE_kmod-crypto-hw-eip93=y
++CONFIG_PACKAGE_kmod-crypto-manager=y
++CONFIG_PACKAGE_kmod-crypto-md5=y
++CONFIG_PACKAGE_kmod-crypto-null=y
++CONFIG_PACKAGE_kmod-crypto-rng=y
++CONFIG_PACKAGE_kmod-crypto-seqiv=y
++CONFIG_PACKAGE_kmod-crypto-sha1=y
++CONFIG_PACKAGE_kmod-crypto-sha256=y
++CONFIG_PACKAGE_kmod-crypto-sha3=y
++CONFIG_PACKAGE_kmod-crypto-sha512=y
++CONFIG_PACKAGE_kmod-dummy=y
++CONFIG_PACKAGE_kmod-gpio-button-hotplug=y
++CONFIG_PACKAGE_kmod-hwmon-core=y
++CONFIG_PACKAGE_kmod-i2c-core=y
++CONFIG_PACKAGE_kmod-inet-diag=y
++CONFIG_PACKAGE_kmod-iptables=y
++CONFIG_PACKAGE_kmod-ipt-core=y
++CONFIG_PACKAGE_kmod-leds-gpio=y
++CONFIG_PACKAGE_kmod-lib-crc-ccitt=y
++CONFIG_PACKAGE_kmod-libphy=y
++CONFIG_PACKAGE_kmod-mac80211=y
++CONFIG_PACKAGE_kmod-macvlan=y
++CONFIG_PACKAGE_kmod-mppe=y
++CONFIG_PACKAGE_kmod-mt76-connac=y
++CONFIG_PACKAGE_kmod-mt76-core=y
++CONFIG_PACKAGE_kmod-netlink-diag=y
++CONFIG_PACKAGE_kmod-nf-conntrack=y
++CONFIG_PACKAGE_kmod-nf-conntrack-netlink=y
++CONFIG_PACKAGE_kmod-nf-flow=y
++CONFIG_PACKAGE_kmod-nf-ipt=y
++CONFIG_PACKAGE_kmod-nf-log=y
++CONFIG_PACKAGE_kmod-nf-log6=y
++CONFIG_PACKAGE_kmod-nf-nat=y
++CONFIG_PACKAGE_kmod-nf-nathelper=y
++CONFIG_PACKAGE_kmod-nf-nathelper-pptp=y
++CONFIG_PACKAGE_kmod-nfnetlink=y
++CONFIG_PACKAGE_kmod-nf-reject=y
++CONFIG_PACKAGE_kmod-nf-reject6=y
++CONFIG_PACKAGE_kmod-nf-socket=y
++CONFIG_PACKAGE_kmod-nft-core=y
++CONFIG_PACKAGE_kmod-nft-fib=y
++CONFIG_PACKAGE_kmod-nft-fullcone=y
++CONFIG_PACKAGE_kmod-nft-nat=y
++CONFIG_PACKAGE_kmod-nft-offload=y
++CONFIG_PACKAGE_kmod-nf-tproxy=y
++CONFIG_PACKAGE_kmod-nft-socket=y
++CONFIG_PACKAGE_kmod-nft-tproxy=y
++CONFIG_PACKAGE_kmod-phy-realtek=y
++CONFIG_PACKAGE_kmod-ppp=y
++CONFIG_PACKAGE_kmod-pppoe=y
++CONFIG_PACKAGE_kmod-pppox=y
++CONFIG_PACKAGE_kmod-regmap-core=y
++CONFIG_PACKAGE_kmod-regmap-i2c=y
++CONFIG_PACKAGE_kmod-slhc=y
++CONFIG_PACKAGE_kmod-tcp-bbr=y
++CONFIG_PACKAGE_kmod-tun=y
++CONFIG_PACKAGE_knot-resolver_dnstap=y
++CONFIG_PACKAGE_libatomic=y
++CONFIG_PACKAGE_libblobmsg-json=y
++CONFIG_PACKAGE_libbpf=y
++CONFIG_PACKAGE_libc=y
++CONFIG_PACKAGE_libcap=y
++CONFIG_PACKAGE_libcap-ng=y
++CONFIG_PACKAGE_libcurl=y
++CONFIG_PACKAGE_libelf=y
++CONFIG_PACKAGE_libev=y
++CONFIG_PACKAGE_libgcc=y
++CONFIG_PACKAGE_libgmp=y
++CONFIG_PACKAGE_libiwinfo=y
++CONFIG_PACKAGE_libiwinfo-data=y
++CONFIG_PACKAGE_libjson-c=y
++CONFIG_PACKAGE_libjson-script=y
++CONFIG_PACKAGE_libltdl=y
++CONFIG_PACKAGE_liblua=y
++CONFIG_PACKAGE_liblua5.4=y
++CONFIG_PACKAGE_liblucihttp=y
++CONFIG_PACKAGE_liblucihttp-lua=y
++CONFIG_PACKAGE_liblucihttp-ucode=y
++CONFIG_PACKAGE_libmbedtls=y
++CONFIG_PACKAGE_libminiupnpc=y
++CONFIG_PACKAGE_libmnl=y
++CONFIG_PACKAGE_libnatpmp=y
++CONFIG_PACKAGE_libncurses=y
++CONFIG_PACKAGE_libnetfilter-conntrack=y
++CONFIG_PACKAGE_libnettle=y
++CONFIG_PACKAGE_libnfnetlink=y
++CONFIG_PACKAGE_libnftnl=y
++CONFIG_PACKAGE_libnghttp2=y
++CONFIG_PACKAGE_libnl-tiny=y
++CONFIG_PACKAGE_libopenssl=y
++CONFIG_PACKAGE_libopenssl-conf=y
++CONFIG_PACKAGE_libpcre2=y
++CONFIG_PACKAGE_libpthread=y
++CONFIG_PACKAGE_libreadline=y
++CONFIG_PACKAGE_librt=y
++CONFIG_PACKAGE_libruby=y
++CONFIG_PACKAGE_libstdcpp=y
++CONFIG_PACKAGE_libubox=y
++CONFIG_PACKAGE_libubus=y
++CONFIG_PACKAGE_libubus-lua=y
++CONFIG_PACKAGE_libuci=y
++CONFIG_PACKAGE_libuci-lua=y
++CONFIG_PACKAGE_libuclient=y
++CONFIG_PACKAGE_libucode=y
++CONFIG_PACKAGE_libudebug=y
++CONFIG_PACKAGE_libustream-openssl=y
++CONFIG_PACKAGE_libuuid=y
++CONFIG_PACKAGE_libuv=y
++CONFIG_PACKAGE_libwebsockets-full=y
++CONFIG_PACKAGE_libyaml=y
++CONFIG_PACKAGE_logd=y
++CONFIG_PACKAGE_lua=y
++CONFIG_PACKAGE_luci=y
++CONFIG_PACKAGE_luci-app-adguardhome=y
++CONFIG_PACKAGE_luci-app-arpbind=y
++CONFIG_PACKAGE_luci-app-autoreboot=y
++CONFIG_PACKAGE_luci-app-ddns=y
++CONFIG_PACKAGE_luci-app-ddns-go=y
++CONFIG_PACKAGE_luci-app-firewall=y
++CONFIG_PACKAGE_luci-app-lucky=y
++CONFIG_PACKAGE_luci-app-msd_lite=y
++CONFIG_PACKAGE_luci-app-openclash=y
++CONFIG_PACKAGE_luci-app-package-manager=y
++CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Haproxy=y
++CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=y
++CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Server=y
++CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Simple_Obfs=y
++CONFIG_PACKAGE_luci-app-passwall_INCLUDE_SingBox=y
++CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Geoview=y
++CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Plugin=y
++CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray=y
++CONFIG_PACKAGE_luci-app-passwall=y
++CONFIG_PACKAGE_luci-app-rtp2httpd=y
++CONFIG_PACKAGE_luci-app-smartdns_INCLUDE_WebUI=y
++CONFIG_PACKAGE_luci-app-smartdns=y
++CONFIG_PACKAGE_luci-app-ttyd=y
++CONFIG_PACKAGE_luci-app-udpxy=y
++CONFIG_PACKAGE_luci-app-upnp=y
++CONFIG_PACKAGE_luci-app-vlmcsd=y
++CONFIG_PACKAGE_luci-app-watchcat=y
++CONFIG_PACKAGE_luci-app-wechatpush=y
++CONFIG_PACKAGE_luci-app-wifihistory=y
++CONFIG_PACKAGE_luci-app-wol=y
++CONFIG_PACKAGE_luci-app-zerotier=y
++CONFIG_PACKAGE_luci-base=y
++CONFIG_PACKAGE_luci-compat=y
++CONFIG_PACKAGE_luci-i18n-arpbind-zh-cn=y
++CONFIG_PACKAGE_luci-i18n-autoreboot-zh-cn=y
++CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
++CONFIG_PACKAGE_luci-i18n-ddns-go-zh-cn=y
++CONFIG_PACKAGE_luci-i18n-ddns-zh-cn=y
++CONFIG_PACKAGE_luci-i18n-firewall-zh-cn=y
++CONFIG_PACKAGE_luci-i18n-lucky-zh-cn=y
++CONFIG_PACKAGE_luci-i18n-msd_lite-zh-cn=y
++CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn=y
++CONFIG_PACKAGE_luci-i18n-passwall-zh-cn=y
++CONFIG_PACKAGE_luci-i18n-rtp2httpd-zh-cn=y
++CONFIG_PACKAGE_luci-i18n-smartdns-zh-cn=y
++CONFIG_PACKAGE_luci-i18n-ttyd-zh-cn=y
++CONFIG_PACKAGE_luci-i18n-udpxy-zh-cn=y
++CONFIG_PACKAGE_luci-i18n-upnp-zh-cn=y
++CONFIG_PACKAGE_luci-i18n-vlmcsd-zh-cn=y
++CONFIG_PACKAGE_luci-i18n-watchcat-zh-cn=y
++CONFIG_PACKAGE_luci-i18n-wechatpush-zh-cn=y
++CONFIG_PACKAGE_luci-i18n-wifihistory-zh-cn=y
++CONFIG_PACKAGE_luci-i18n-wol-zh-cn=y
++CONFIG_PACKAGE_luci-i18n-zerotier-zh-cn=y
++CONFIG_PACKAGE_luci-lib-base=y
++CONFIG_PACKAGE_luci-lib-ip=y
++CONFIG_PACKAGE_luci-lib-jsonc=y
++CONFIG_PACKAGE_luci-lib-nixio_openssl=y
++CONFIG_PACKAGE_luci-lib-nixio=y
++CONFIG_PACKAGE_luci-lib-uqr=y
++CONFIG_PACKAGE_luci-light=y
++CONFIG_PACKAGE_luci-lua-runtime=y
++CONFIG_PACKAGE_luci-mod-admin-full=y
++CONFIG_PACKAGE_luci-mod-network=y
++CONFIG_PACKAGE_luci-mod-status=y
++CONFIG_PACKAGE_luci-mod-system=y
++CONFIG_PACKAGE_luci-proto-ipv6=y
++CONFIG_PACKAGE_luci-proto-ppp=y
++CONFIG_PACKAGE_luci-ssl=y
++CONFIG_PACKAGE_luci-theme-argon=y
++CONFIG_PACKAGE_luci-theme-bootstrap=y
++CONFIG_PACKAGE_lucky=y
++CONFIG_PACKAGE_lyaml=y
++CONFIG_PACKAGE_MAC80211_DEBUGFS=y
++CONFIG_PACKAGE_MAC80211_MESH=y
++CONFIG_PACKAGE_microsocks=y
++CONFIG_PACKAGE_miniupnpd-nftables=y
++CONFIG_PACKAGE_msd_lite=y
++CONFIG_PACKAGE_mtd=y
++CONFIG_PACKAGE_netifd=y
++CONFIG_PACKAGE_nftables-json=y
++CONFIG_PACKAGE_odhcp6c=y
++CONFIG_PACKAGE_odhcpd-ipv6only=y
++CONFIG_PACKAGE_openssh-client=y
++CONFIG_PACKAGE_openssh-keygen=y
++CONFIG_PACKAGE_openssh-sftp-server=y
++CONFIG_PACKAGE_openssl-util=y
++CONFIG_PACKAGE_openwrt-keyring=y
++CONFIG_PACKAGE_pciutils=y
++CONFIG_PACKAGE_ppp=y
++CONFIG_PACKAGE_ppp-mod-pppoe=y
++CONFIG_PACKAGE_procd=y
++CONFIG_PACKAGE_procd-seccomp=y
++CONFIG_PACKAGE_procd-ujail=y
++CONFIG_PACKAGE_resolveip=y
++CONFIG_PACKAGE_rpcd=y
++CONFIG_PACKAGE_rpcd-mod-file=y
++CONFIG_PACKAGE_rpcd-mod-iwinfo=y
++CONFIG_PACKAGE_rpcd-mod-luci=y
++CONFIG_PACKAGE_rpcd-mod-rpcsys=y
++CONFIG_PACKAGE_rpcd-mod-rrdns=y
++CONFIG_PACKAGE_rpcd-mod-ucode=y
++CONFIG_PACKAGE_rtl8261n-firmware=y
++CONFIG_PACKAGE_rtp2httpd=y
++CONFIG_PACKAGE_ruby=y
++CONFIG_PACKAGE_ruby-bigdecimal=y
++CONFIG_PACKAGE_ruby-date=y
++CONFIG_PACKAGE_ruby-digest=y
++CONFIG_PACKAGE_ruby-enc=y
++CONFIG_PACKAGE_ruby-pstore=y
++CONFIG_PACKAGE_ruby-psych=y
++CONFIG_PACKAGE_ruby-stringio=y
++CONFIG_PACKAGE_ruby-yaml=y
++CONFIG_PACKAGE_shadowsocks-rust-sslocal=y
++CONFIG_PACKAGE_shadowsocks-rust-ssserver=y
++CONFIG_PACKAGE_shellsync=y
++CONFIG_PACKAGE_simple-obfs-client=y
++CONFIG_PACKAGE_sing-box=y
++CONFIG_PACKAGE_smartdns=y
++CONFIG_PACKAGE_smartdns-ui=y
++CONFIG_PACKAGE_TAR_BZIP2=y
++CONFIG_PACKAGE_TAR_GZIP=y
++CONFIG_PACKAGE_TAR_POSIX_ACL=y
++CONFIG_PACKAGE_TAR_XATTR=y
++CONFIG_PACKAGE_TAR_XZ=y
++CONFIG_PACKAGE_TAR_ZSTD=y
++CONFIG_PACKAGE_tcpdump-mini=y
++CONFIG_PACKAGE_tcping=y
++CONFIG_PACKAGE_terminfo=y
++CONFIG_PACKAGE_ttyd=y
++CONFIG_PACKAGE_ubi-utils=y
++CONFIG_PACKAGE_uboot-envtools=y
++CONFIG_PACKAGE_ubox=y
++CONFIG_PACKAGE_ubus=y
++CONFIG_PACKAGE_ubusd=y
++CONFIG_PACKAGE_uci=y
++CONFIG_PACKAGE_uclient-fetch=y
++CONFIG_PACKAGE_ucode=y
++CONFIG_PACKAGE_ucode-mod-digest=y
++CONFIG_PACKAGE_ucode-mod-fs=y
++CONFIG_PACKAGE_ucode-mod-html=y
++CONFIG_PACKAGE_ucode-mod-log=y
++CONFIG_PACKAGE_ucode-mod-lua=y
++CONFIG_PACKAGE_ucode-mod-math=y
++CONFIG_PACKAGE_ucode-mod-nl80211=y
++CONFIG_PACKAGE_ucode-mod-rtnl=y
++CONFIG_PACKAGE_ucode-mod-ubus=y
++CONFIG_PACKAGE_ucode-mod-uci=y
++CONFIG_PACKAGE_ucode-mod-uloop=y
++CONFIG_PACKAGE_udpxy=y
++CONFIG_PACKAGE_uhttpd=y
++CONFIG_PACKAGE_uhttpd-mod-ubus=y
++CONFIG_PACKAGE_unzip=y
++CONFIG_PACKAGE_urandom-seed=y
++CONFIG_PACKAGE_urngd=y
++CONFIG_PACKAGE_usign=y
++CONFIG_PACKAGE_v2ray-plugin=y
++CONFIG_PACKAGE_vlmcsd=y
++CONFIG_PACKAGE_watchcat=y
++CONFIG_PACKAGE_WECHATPUSH_Enable_Host_Information_Detection=y
++CONFIG_PACKAGE_wifi-scripts=y
++CONFIG_PACKAGE_wireless-regdb=y
++CONFIG_PACKAGE_wpad-mbedtls=y
++CONFIG_PACKAGE_xray-core=y
++CONFIG_PACKAGE_zerotier=y
++CONFIG_PACKAGE_zlib=y
++CONFIG_TARGET_qualcommbe_ipq95xx_DEVICE_askey_sbe1v1k=y
++CONFIG_TARGET_qualcommbe_ipq95xx=y
++CONFIG_TARGET_qualcommbe=y
++CONFIG_TARGET_ROOTFS_SQUASHFS=y
++CONFIG_TARGET_SQUASHFS_BLOCK_SIZE=256
++CONFIG_VERSION_DIST="SBE1V1K Nexus"
++CONFIG_VERSION_HWREV="SBE1V1K"
++CONFIG_VERSION_MANUFACTURER="Codex + Open Source Community"
++CONFIG_VERSION_NUMBER="R26.8.1-Nexus-Mainline"
++CONFIG_VERSION_PRODUCT="Askey SBE1V1K"
+diff --git a/files/etc/sbe1v1k-release b/files/etc/sbe1v1k-release
+index 1e841bafd1..6f243d5008 100644
+--- a/files/etc/sbe1v1k-release
++++ b/files/etc/sbe1v1k-release
+@@ -1,5 +1,8 @@
+-SBE1V1K Codex Stable Preview 2
++SBE1V1K Nexus Mainline R26.8.1
+ Build date: 2026-08-01
+-Base: luckkyboy/SBE1V1K 02fb9517c9
+-Purpose: mainline qualcommbe stability, US tri-band Wi-Fi, and recovery testing
+-Hardware acceleration: upstream PPE Ethernet driver only; no experimental QSDK ECM/NSS fast path
++Base: naoki66/ImmortalWrt-for-Gemtek-XR1710G 5747ad32a4
++Hardware: Askey/Spectrum SBE1V1K, Qualcomm IPQ9574 + QCN9274
++Purpose: XR1710G feature/UI set on the validated SBE1V1K mainline hardware port
++Acceleration: upstream PPE Ethernet driver; no experimental QSDK ECM/NSS fast path
++Safety: strict model/archive sysupgrade validation; rootfs first and kernel last
++Defaults: Argon UI; proxy applications installed but disabled until configured
+diff --git a/files/etc/uci-defaults/99-sbe1v1k-nexus b/files/etc/uci-defaults/99-sbe1v1k-nexus
+new file mode 100755
+index 0000000000..7609f2db69
+--- /dev/null
++++ b/files/etc/uci-defaults/99-sbe1v1k-nexus
+@@ -0,0 +1,14 @@
++#!/bin/sh
++
++# Keep first boot predictable: use the requested UI, but do not let optional
++# proxy/DNS applications take over routing before the owner configures them.
++if uci -q get luci.main >/dev/null; then
++	uci -q set luci.main.mediaurlbase='/luci-static/argon'
++	uci -q commit luci
++fi
++
++for service in passwall openclash adguardhome; do
++	[ -x "/etc/init.d/$service" ] && "/etc/init.d/$service" disable
++done
++
++exit 0

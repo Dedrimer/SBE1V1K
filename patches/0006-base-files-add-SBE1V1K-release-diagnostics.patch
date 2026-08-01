@@ -1,0 +1,73 @@
+From 2976bb4f925724300782fcc7ec7b16b851507745 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Date: Sat, 1 Aug 2026 23:24:08 +0800
+Subject: [PATCH 6/8] base-files: add SBE1V1K release diagnostics
+
+---
+ files/etc/sbe1v1k-release                     |  5 +++
+ files/usr/bin/sbe1v1k-diag                    | 34 +++++++++++++++++++
+ .../usr/share/hostap/resolve-radio-index.uc   |  0
+ sbe1v1k-tests/test-upgrade-validation.sh      |  0
+ 4 files changed, 39 insertions(+)
+ create mode 100644 files/etc/sbe1v1k-release
+ create mode 100755 files/usr/bin/sbe1v1k-diag
+ mode change 100644 => 100755 package/network/config/wifi-scripts/files/usr/share/hostap/resolve-radio-index.uc
+ mode change 100644 => 100755 sbe1v1k-tests/test-upgrade-validation.sh
+
+diff --git a/files/etc/sbe1v1k-release b/files/etc/sbe1v1k-release
+new file mode 100644
+index 0000000000..1e841bafd1
+--- /dev/null
++++ b/files/etc/sbe1v1k-release
+@@ -0,0 +1,5 @@
++SBE1V1K Codex Stable Preview 2
++Build date: 2026-08-01
++Base: luckkyboy/SBE1V1K 02fb9517c9
++Purpose: mainline qualcommbe stability, US tri-band Wi-Fi, and recovery testing
++Hardware acceleration: upstream PPE Ethernet driver only; no experimental QSDK ECM/NSS fast path
+diff --git a/files/usr/bin/sbe1v1k-diag b/files/usr/bin/sbe1v1k-diag
+new file mode 100755
+index 0000000000..ebd6455141
+--- /dev/null
++++ b/files/usr/bin/sbe1v1k-diag
+@@ -0,0 +1,34 @@
++#!/bin/sh
++
++echo '=== release ==='
++cat /etc/sbe1v1k-release 2>/dev/null
++cat /etc/openwrt_release 2>/dev/null
++
++echo '=== board ==='
++ubus call system board 2>/dev/null
++
++echo '=== kernel ==='
++uname -a
++cat /proc/cmdline
++
++echo '=== partitions ==='
++cat /proc/partitions
++blkid 2>/dev/null
++
++echo '=== network ==='
++ip -br link
++ip -br addr
++ubus call network.interface dump 2>/dev/null
++
++echo '=== wireless ==='
++iw dev 2>/dev/null
++iw phy 2>/dev/null
++
++echo '=== modules ==='
++lsmod
++
++echo '=== recent kernel warnings/errors ==='
++dmesg | grep -Ei 'error|fail|warn|ath12k|qcom_ppe|rtl826|qca80|mmc|f2fs' | tail -n 400
++
++echo '=== recent system log ==='
++logread | tail -n 400
+diff --git a/package/network/config/wifi-scripts/files/usr/share/hostap/resolve-radio-index.uc b/package/network/config/wifi-scripts/files/usr/share/hostap/resolve-radio-index.uc
+old mode 100644
+new mode 100755
+diff --git a/sbe1v1k-tests/test-upgrade-validation.sh b/sbe1v1k-tests/test-upgrade-validation.sh
+old mode 100644
+new mode 100755

@@ -1,0 +1,957 @@
+From 05af1020ff981da7aa87d3792b2dc002778335a8 Mon Sep 17 00:00:00 2001
+From: Andrew LaMarche <andrewjlamarche@gmail.com>
+Date: Thu, 15 Jan 2026 17:46:15 -0500
+Subject: [PATCH 1/8] qualcommbe: add support for Askey SBE1V1K
+
+This commit adds support for Askey SBE1V1K.
+
+Device specification
+--------------------
+SoC:		Qualcomm IPQ9570
+RAM:		Micron (2GB)
+Flash:		8GB eMMC
+Ethernet:	1x 10G RTL8261BE
+		1x 2.5G QCA8081
+		2x 1G QCA8075
+Wi-Fi:		QCN6214 2.4GHz 4x4
+		QCN6274 5GHz 4x4
+		QCN6274 6GHz 4x4
+LEDs:		1 LED, power/status
+Buttons:	1 reset
+USB ports:	none
+Bootloader:	U-Boot 1.0.9 [spf12.2_CSU2] (Jun 28 2024 - 17:47:10 +0000)
+
+Installation (serial required):
+
+**NOTE** This procedure requires glitching the eMMC. It is very possible
+that you may damage or corrupt your bootloader in doing so. Proceed with
+caution, and always make a full eMMC backup!
+
+**NOTE** If the bootloader has trouble accessing eMMC due to glitching it, any
+U-Boot env updates are written directly to the start of flash, overwriting
+the bootloader. For this reason, it is strongly NOT recommended to make any
+persistent U-Boot env changes from U-Boot itself; do this in Linux.
+
+- Open the chasis and connect to the serial port.
+- While booting, short eMMC CLK to UART VCC during FIT image load to enter
+  U-Boot.
+- setenv ipaddr 192.168.1.1
+- setenv serverip 192.168.1.2
+**NOTE** DO NOT SAVE THE ENV
+- Set your PC IP address to 192.168.1.2 and host the initramfs on a tftp
+  server.
+- tftpboot 0x44000000 initramfs.itb
+- bootm 0x44000000
+If you get an error and it reboots, try loading to 0x80000000.
+
+In the initramfs:
+- fw_setenv bootargs 'console=ttyMSM0,115200n8 rootwait root=/dev/mmcblk0p27'
+- fw_setenv bootcmd 'echo "Hit ctrl+c for shell..."; if sleep 3; then run do_boot; else do_nothing; fi;'
+- fw_setenv do_boot 'mmc read 0x44000000 0x00014022 0x3800; bootm 0x44000000'
+- Install a sysupgrade
+
+U-Boot hardcodes the bootargs to reset on each boot, which is why it is
+necessary for the bootcmd to override them. Thankfully, the vendor did
+not bother to secure U-Boot any further. As long as the vendor software
+does not boot, the U-Boot env will stay. If a vendor image boots, the
+U-Boot env will revert to default. The vendor U-Boot also ignores
+bootdelay, which is why we add a dummy sleep to allow the user time to
+drop into a shell without needing to glitch any more.
+
+Co-authored-by: Kenneth Kasilag <kenneth@kasilag.me>
+Signed-off-by: Andrew LaMarche <andrewjlamarche@gmail.com>
+---
+ .../uboot-envtools/files/qualcommbe_ipq95xx   |   3 +-
+ package/firmware/ipq-wifi/Makefile            |   2 +
+ .../linux/qualcommbe/dts/ipq9570-sbe1v1k.dts  | 708 ++++++++++++++++++
+ target/linux/qualcommbe/image/ipq95xx.mk      |  17 +
+ .../ipq95xx/base-files/etc/board.d/02_network |  19 +
+ .../etc/hotplug.d/firmware/11-ath12k-caldata  |  34 +
+ .../base-files/lib/upgrade/platform.sh        |   9 +-
+ 7 files changed, 790 insertions(+), 2 deletions(-)
+ create mode 100644 target/linux/qualcommbe/dts/ipq9570-sbe1v1k.dts
+ create mode 100644 target/linux/qualcommbe/ipq95xx/base-files/etc/hotplug.d/firmware/11-ath12k-caldata
+
+diff --git a/package/boot/uboot-tools/uboot-envtools/files/qualcommbe_ipq95xx b/package/boot/uboot-tools/uboot-envtools/files/qualcommbe_ipq95xx
+index 1f3dcc60ce..4965ba757a 100644
+--- a/package/boot/uboot-tools/uboot-envtools/files/qualcommbe_ipq95xx
++++ b/package/boot/uboot-tools/uboot-envtools/files/qualcommbe_ipq95xx
+@@ -8,7 +8,8 @@ touch /etc/config/ubootenv
+ board=$(board_name)
+ 
+ case "$board" in
+-8devices,kiwi-dvk)
++8devices,kiwi-dvk|\
++askey,sbe1v1k)
+ 	ubootenv_add_mmc "0:APPSBLENV" "" "0x0" "0x40000" "0x40000"
+ 	;;
+ esac
+diff --git a/package/firmware/ipq-wifi/Makefile b/package/firmware/ipq-wifi/Makefile
+index 78d4abf3b8..0a34447f14 100644
+--- a/package/firmware/ipq-wifi/Makefile
++++ b/package/firmware/ipq-wifi/Makefile
+@@ -32,6 +32,7 @@ ALLWIFIBOARDS:= \
+ 	alfa-network_ap120c-ax \
+ 	aliyun_ap8220 \
+ 	arcadyan_aw1000 \
++	askey_sbe1v1k \
+ 	asus_rt-ax89x \
+ 	buffalo_wxr-5950ax12 \
+ 	cambiumnetworks_xe34 \
+@@ -229,6 +230,7 @@ $(eval $(call generate-ipq-wifi-package,8devices_mango,8devices Mango))
+ $(eval $(call generate-ipq-wifi-package,alfa-network_ap120c-ax,ALFA Network AP120C-AX))
+ $(eval $(call generate-ipq-wifi-package,aliyun_ap8220,Aliyun AP8220))
+ $(eval $(call generate-ipq-wifi-package,arcadyan_aw1000,Arcadyan AW1000))
++$(eval $(call generate-ipq-wifi-package,askey_sbe1v1k,Askey SBE1V1K))
+ $(eval $(call generate-ipq-wifi-package,asus_rt-ax89x,Asus RT-AX89X))
+ $(eval $(call generate-ipq-wifi-package,buffalo_wxr-5950ax12,Buffalo WXR-5950AX12))
+ $(eval $(call generate-ipq-wifi-package,cambiumnetworks_xe34,Cambium Networks XE3-4))
+diff --git a/target/linux/qualcommbe/dts/ipq9570-sbe1v1k.dts b/target/linux/qualcommbe/dts/ipq9570-sbe1v1k.dts
+new file mode 100644
+index 0000000000..f39badf135
+--- /dev/null
++++ b/target/linux/qualcommbe/dts/ipq9570-sbe1v1k.dts
+@@ -0,0 +1,708 @@
++// SPDX-License-Identifier: (GPL-2.0+ OR BSD-3-Clause)
++
++/dts-v1/;
++
++#include "ipq9574.dtsi"
++
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/input/input.h>
++#include <dt-bindings/leds/common.h>
++
++/ {
++	model = "Askey SBE1V1K";
++	compatible = "askey,sbe1v1k", "qcom,ipq9574";
++
++	aliases {
++		led-boot = &led_blue;
++		led-failsafe = &led_red;
++		led-running = &led_blue;
++		led-upgrade = &led_blue;
++
++		serial0 = &blsp1_uart2;
++	};
++
++	chosen {
++		stdout-path = "serial0:115200n8";
++	};
++
++	reserved-memory {
++		tzapp:tzapp@49B00000 {
++			no-map;
++			reg = <0x0 0x49B00000 0x0 0x00600000>;
++		};
++	};
++
++	regulator_fixed_3p3: s3300 {
++		compatible = "regulator-fixed";
++		regulator-min-microvolt = <3300000>;
++		regulator-max-microvolt = <3300000>;
++		regulator-boot-on;
++		regulator-always-on;
++		regulator-name = "fixed_3p3";
++	};
++
++	regulator_fixed_0p925: s0925 {
++		compatible = "regulator-fixed";
++		regulator-min-microvolt = <925000>;
++		regulator-max-microvolt = <925000>;
++		regulator-boot-on;
++		regulator-always-on;
++		regulator-name = "fixed_0p925";
++	};
++
++	gpio-keys {
++		compatible = "gpio-keys";
++		pinctrl-0 = <&gpio_keys_default>;
++		pinctrl-names = "default";
++
++		reset {
++			label = "reset";
++			linux,code = <KEY_RESTART>;
++			gpios = <&tlmm 54 GPIO_ACTIVE_LOW>;
++			debounce-interval = <60>;
++		};
++	};
++
++	leds {
++		compatible = "gpio-leds";
++
++		led_blue: led-blue {
++			color = <LED_COLOR_ID_BLUE>;
++			function = LED_FUNCTION_STATUS;
++			gpios = <&tlmm 56 GPIO_ACTIVE_HIGH>;
++		};
++
++		led_red: led-red {
++			color = <LED_COLOR_ID_RED>;
++			function = LED_FUNCTION_STATUS;
++			gpios = <&tlmm 44 GPIO_ACTIVE_HIGH>;
++		};
++
++		led-green {
++			color = <LED_COLOR_ID_GREEN>;
++			function = LED_FUNCTION_STATUS;
++			gpios = <&tlmm 45 GPIO_ACTIVE_HIGH>;
++		};
++	};
++
++	fan: pwm-fan {
++		compatible = "pwm-fan";
++		pwms = <&pwm 3 40000 0>;
++		#cooling-cells = <2>;
++		cooling-levels = <36 72 128 255>;
++	};
++
++	thermal-zones {
++		top-glue-thermal {
++			thermal-sensors = <&tsens 15>;
++
++			trips {
++				cpu_trip_crit: crit {
++					temperature = <110000>;
++					hysteresis = <1000>;
++					type = "critical";
++				};
++
++				cpu_trip_hot: hot {
++					temperature = <100000>;
++					hysteresis = <1000>;
++					type = "hot";
++				};
++
++				cpu_trip_active_high: active-high {
++					temperature = <80000>;
++					hysteresis = <1000>;
++					type = "active";
++				};
++
++				cpu_trip_active_med: active-med {
++					temperature = <65000>;
++					hysteresis = <1000>;
++					type = "active";
++				};
++
++				cpu_trip_active_low: active-low {
++					temperature = <50000>;
++					hysteresis = <1000>;
++					type = "active";
++				};
++
++				cpu_trip_active_silent: active-silent {
++					temperature = <40000>;
++					hysteresis = <1000>;
++					type = "active";
++				};
++			};
++
++			cooling-maps {
++				cpu-active-high {
++					cooling-device = <&fan 3 3>;
++					trip = <&cpu_trip_active_high>;
++				};
++
++				cpu-active-med {
++					cooling-device = <&fan 2 2>;
++					trip = <&cpu_trip_active_med>;
++				};
++
++				cpu-active-low {
++					cooling-device = <&fan 1 1>;
++					trip = <&cpu_trip_active_low>;
++				};
++
++				cpu-active-silent {
++					cooling-device = <&fan 0 0>;
++					trip = <&cpu_trip_active_silent>;
++				};
++			};
++		};
++	};
++};
++
++&pwm {
++	pinctrl-0 = <&pwm_pins>;
++	pinctrl-names = "default";
++	status = "okay";
++};
++
++&blsp1_uart2 {
++	pinctrl-0 = <&uart2_pins>;
++	pinctrl-names = "default";
++	status = "okay";
++};
++
++&rpm_requests {
++	regulators {
++		compatible = "qcom,rpm-mp5496-regulators";
++
++		ipq9574_s1: s1 {
++		/*
++		* During kernel bootup, the SoC runs at 800MHz with 875mV set by the bootloaders.
++		* During regulator registration, kernel not knowing the initial voltage,
++		* considers it as zero and brings up the regulators with minimum supported voltage.
++		* Update the regulator-min-microvolt with SVS voltage of 725mV so that
++		* the regulators are brought up with 725mV which is sufficient for all the
++		* corner parts to operate at 800MHz
++		*/
++			regulator-min-microvolt = <725000>;
++			regulator-max-microvolt = <1075000>;
++		};
++
++		mp5496_l5: l5 {
++			regulator-min-microvolt = <1800000>;
++			regulator-max-microvolt = <1800000>;
++			regulator-always-on;
++			regulator-boot-on;
++		};
++	};
++};
++
++&sdhc_1 {
++	bus-width = <8>;
++	max-frequency = <384000000>;
++	mmc-ddr-1_8v;
++	mmc-hs200-1_8v;
++	mmc-hs400-1_8v;
++	mmc-hs400-enhanced-strobe;
++	pinctrl-0 = <&sdc_default_state>;
++	pinctrl-names = "default";
++	status = "okay";
++
++	card@0 {
++		compatible = "mmc-card";
++		reg = <0>;
++
++		block {
++			compatible = "block-device";
++
++			partitions {
++				block-partition-art {
++					partname = "0:ART";
++
++					nvmem-layout {
++						compatible = "fixed-layout";
++						#address-cells = <1>;
++						#size-cells = <1>;
++
++						ethaddr: ethaddr@0 {
++							compatible = "mac-base";
++							reg = <0x0 0x6>;
++							#nvmem-cell-cells = <1>;
++						};
++					};
++				};
++			};
++		};
++	};
++};
++
++&sleep_clk {
++	clock-frequency = <32000>;
++};
++
++&tlmm {
++	/*
++	 * GPIO 60 is the shared hardware reset for the QCA8075 package, and the
++	 * board holds it asserted (low) at power-on. reset-gpios is NOT honored
++	 * on the package container node nor on the ethernet-phy@N nodes inside
++	 * it (only standalone PHY nodes get MDIO reset handling), so drive it
++	 * here as a gpio-hog. The hog is applied when the tlmm gpiochip
++	 * registers (very early), releasing the package well before the MDIO
++	 * bus is scanned; otherwise PHYs 18/19 read as "missing" and PPE port 3
++	 * fails to connect (-ENODEV), wedging the whole ethernet driver.
++	 */
++	qca8075_reset_hog {
++		gpio-hog;
++		gpios = <60 GPIO_ACTIVE_HIGH>;
++		output-high;
++		line-name = "qca8075-reset-n";
++	};
++
++	gpio_keys_default: gpio-keys-default-state {
++		pins = "gpio54";
++		function = "gpio";
++		drive-strength = <8>;
++		bias-pull-up;
++	};
++
++	sdc_default_state: sdc-default-state {
++		clk-pins {
++			pins = "gpio5";
++			function = "sdc_clk";
++			drive-strength = <8>;
++			bias-disable;
++		};
++
++		cmd-pins {
++			pins = "gpio4";
++			function = "sdc_cmd";
++			drive-strength = <8>;
++			bias-pull-up;
++		};
++
++		data-pins {
++			pins = "gpio0", "gpio1", "gpio2",
++				"gpio3", "gpio6", "gpio7",
++				"gpio8", "gpio9";
++			function = "sdc_data";
++			drive-strength = <8>;
++			bias-pull-up;
++		};
++
++		rclk-pins {
++			pins = "gpio10";
++			function = "sdc_rclk";
++			drive-strength = <8>;
++			bias-pull-down;
++		};
++	};
++
++	pcie1_default: pcie1-default-state {
++		clkreq-n-pins {
++			pins = "gpio25";
++			function = "pcie1_clk";
++			drive-strength = <6>;
++			bias-pull-up;
++		};
++
++		perst-n-pins {
++			pins = "gpio26";
++			function = "gpio";
++			drive-strength = <8>;
++			bias-pull-down;
++			output-low;
++		};
++
++		wake-n-pins {
++			pins = "gpio27";
++			function = "pcie1_wake";
++			drive-strength = <6>;
++			bias-pull-up;
++		};
++	};
++
++	pcie2_default: pcie2-default-state {
++		clkreq-n-pins {
++			pins = "gpio28";
++			function = "pcie2_clk";
++			drive-strength = <6>;
++			bias-pull-up;
++		};
++
++		perst-n-pins {
++			pins = "gpio29";
++			function = "gpio";
++			drive-strength = <8>;
++			bias-pull-down;
++			output-low;
++		};
++
++		wake-n-pins {
++			pins = "gpio30";
++			function = "pcie2_wake";
++			drive-strength = <6>;
++			bias-pull-up;
++		};
++	};
++
++	pcie3_default: pcie3-default-state {
++		clkreq-n-pins {
++			pins = "gpio31";
++			function = "pcie3_clk";
++			drive-strength = <6>;
++			bias-pull-up;
++		};
++
++		perst-n-pins {
++			pins = "gpio32";
++			function = "gpio";
++			drive-strength = <8>;
++			bias-pull-down;
++			output-low;
++		};
++
++		wake-n-pins {
++			pins = "gpio33";
++			function = "pcie3_wake";
++			drive-strength = <6>;
++			bias-pull-up;
++		};
++	};
++
++	pwm_pins: pwm-pins {
++		pwm {
++			pins = "gpio53";
++			function = "pwm";
++			drive-strength = <8>;
++		};
++	};
++};
++
++&qpic_bam {
++	status = "okay";
++};
++
++&qcom_ppe {
++	status = "okay";
++
++	ethernet-ports {
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		port@3 {
++			reg = <3>;
++			phy-mode = "qsgmii";
++			phy-handle = <&qca8075_18>;
++			pcs-handle = <&pcs0_ch2>;
++			managed = "in-band-status";
++			label = "lan2";
++
++			nvmem-cells = <&ethaddr 1>;
++			nvmem-cell-names = "mac-address";
++
++			clocks = <&nsscc NSS_CC_PORT3_MAC_CLK>,
++				 <&nsscc NSS_CC_PORT3_RX_CLK>,
++				 <&nsscc NSS_CC_PORT3_TX_CLK>;
++			clock-names = "mac", "rx", "tx";
++
++			resets = <&nsscc PORT3_MAC_ARES>,
++				 <&nsscc PORT3_RX_ARES>,
++				 <&nsscc PORT3_TX_ARES>;
++			reset-names = "mac", "rx", "tx";
++		};
++
++		port@4 {
++			reg = <4>;
++			phy-mode = "qsgmii";
++			phy-handle = <&qca8075_19>;
++			pcs-handle = <&pcs0_ch3>;
++			managed = "in-band-status";
++			label = "lan3";
++
++			nvmem-cells = <&ethaddr 1>;
++			nvmem-cell-names = "mac-address";
++
++			clocks = <&nsscc NSS_CC_PORT4_MAC_CLK>,
++				 <&nsscc NSS_CC_PORT4_RX_CLK>,
++				 <&nsscc NSS_CC_PORT4_TX_CLK>;
++			clock-names = "mac", "rx", "tx";
++
++			resets = <&nsscc PORT4_MAC_ARES>,
++				 <&nsscc PORT4_RX_ARES>,
++				 <&nsscc PORT4_TX_ARES>;
++			reset-names = "mac", "rx", "tx";
++		};
++
++		port@5 {
++			reg = <5>;
++			phy-mode = "usxgmii";
++			phy-handle = <&qca8081_28>;
++			pcs-handle = <&pcs1_ch0>;
++			managed = "in-band-status";
++			label = "lan1";
++
++			nvmem-cells = <&ethaddr 1>;
++			nvmem-cell-names = "mac-address";
++
++			clocks = <&nsscc NSS_CC_PORT5_MAC_CLK>,
++				 <&nsscc NSS_CC_PORT5_RX_CLK>,
++				 <&nsscc NSS_CC_PORT5_TX_CLK>;
++			clock-names = "mac", "rx", "tx";
++
++			resets = <&nsscc PORT5_MAC_ARES>,
++				 <&nsscc PORT5_RX_ARES>,
++				 <&nsscc PORT5_TX_ARES>;
++			reset-names = "mac", "rx", "tx";
++		};
++
++		port@6 {
++			reg = <6>;
++			phy-mode = "usxgmii";
++			phy-handle = <&rtl8261be_0>;
++			pcs-handle = <&pcs2_ch0>;
++			managed = "in-band-status";
++			label = "wan";
++
++			nvmem-cells = <&ethaddr 0>;
++			nvmem-cell-names = "mac-address";
++
++			clocks = <&nsscc NSS_CC_PORT6_MAC_CLK>,
++				 <&nsscc NSS_CC_PORT6_RX_CLK>,
++				 <&nsscc NSS_CC_PORT6_TX_CLK>;
++			clock-names = "mac", "rx", "tx";
++
++			resets = <&nsscc PORT6_MAC_ARES>,
++				 <&nsscc PORT6_RX_ARES>,
++				 <&nsscc PORT6_TX_ARES>;
++			reset-names = "mac", "rx", "tx";
++		};
++	};
++};
++
++&mdio {
++	status = "okay";
++
++	rtl8261be_0: ethernet-phy@5 {
++		compatible = "ethernet-phy-ieee802.3-c45";
++		reg = <0>;
++		reset-gpios = <&tlmm 41 GPIO_ACTIVE_LOW>;
++		reset-assert-us = <40000>;
++		reset-deassert-us = <150000>;
++	};
++
++	ethernet-phy-package@16 {
++		compatible = "qcom,qca8075-package";
++		#address-cells = <1>;
++		#size-cells = <0>;
++		reg = <16>;
++
++		qcom,package-mode = "qsgmii";
++
++		qca8075_18: ethernet-phy@18 {
++			compatible = "ethernet-phy-ieee802.3-c22";
++			reg = <18>;
++		};
++
++		qca8075_19: ethernet-phy@19 {
++			compatible = "ethernet-phy-ieee802.3-c22";
++			reg = <19>;
++		};
++	};
++
++	qca8081_28: ethernet-phy@28 {
++		compatible = "ethernet-phy-id004d.d101";
++		reg = <28>;
++		reset-gpios = <&tlmm 52 GPIO_ACTIVE_LOW>;
++		reset-deassert-us = <10000>;
++
++		leds {
++			#address-cells = <1>;
++			#size-cells = <0>;
++
++			led@0 {
++				reg = <0>;
++				color = <LED_COLOR_ID_YELLOW>;
++				default-state = "keep";
++				function = LED_FUNCTION_LAN;
++				active-low;
++			};
++
++			led@2 {
++				reg = <2>;
++				color = <LED_COLOR_ID_GREEN>;
++				default-state = "keep";
++				function = LED_FUNCTION_LAN;
++				active-low;
++			};
++		};
++	};
++};
++
++&ref_48mhz_clk {
++	clock-div = <1>;
++	clock-mult = <1>;
++};
++
++&xo_board_clk {
++	clock-div = <2>;
++	clock-mult = <1>;
++};
++
++&xo_clk {
++	clock-frequency = <48000000>;
++};
++
++&pcie1_phy {
++	status = "okay";
++};
++
++&pcie1 {
++	pinctrl-0 = <&pcie1_default>;
++	pinctrl-names = "default";
++
++	perst-gpios = <&tlmm 26 GPIO_ACTIVE_LOW>;
++	wake-gpios = <&tlmm 27 GPIO_ACTIVE_LOW>;
++	status = "okay";
++
++	pcie@0 {
++		device_type = "pci";
++		reg = <0x0 0x0 0x0 0x0 0x0>;
++		#address-cells = <3>;
++		#size-cells = <2>;
++		ranges;
++
++		wifi@0 {
++			compatible = "pci17cb,1109";
++			reg = <0x0 0x0 0x0 0x0 0x0>;
++			qcom,calibration-variant = "Askey-SBE1V1K_1";
++
++			nvmem-cells = <&ethaddr (-3)>;
++			nvmem-cell-names = "mac-address";
++
++			ports {
++				#address-cells = <1>;
++				#size-cells = <0>;
++
++				port@0 {
++					reg = <0>;
++
++					wifi1_wsi_tx: endpoint {
++						remote-endpoint = <&wifi2_wsi_rx>;
++					};
++				};
++
++				port@1 {
++					reg = <1>;
++
++					wifi1_wsi_rx: endpoint {
++						remote-endpoint = <&wifi3_wsi_tx>;
++					};
++				};
++			};
++		};
++	};
++};
++
++&pcie2_phy {
++	status = "okay";
++};
++
++&pcie2 {
++	pinctrl-0 = <&pcie2_default>;
++	pinctrl-names = "default";
++
++	perst-gpios = <&tlmm 29 GPIO_ACTIVE_LOW>;
++	wake-gpios = <&tlmm 30 GPIO_ACTIVE_LOW>;
++	status = "okay";
++
++	pcie@0 {
++		device_type = "pci";
++		reg = <0x0 0x0 0x1 0x0 0x0>;
++		#address-cells = <3>;
++		#size-cells = <2>;
++		ranges;
++
++		wifi@0 {
++			compatible = "pci17cb,1109";
++			reg = <0x0 0x0 0x0 0x0 0x0>;
++			qcom,calibration-variant = "Askey-SBE1V1K_4";
++			qcom,wsi-controller;
++
++			nvmem-cells = <&ethaddr (-1)>;
++			nvmem-cell-names = "mac-address";
++
++			ports {
++				#address-cells = <1>;
++				#size-cells = <0>;
++
++				port@0 {
++					reg = <0>;
++
++					wifi2_wsi_tx: endpoint {
++						remote-endpoint = <&wifi3_wsi_rx>;
++					};
++				};
++
++				port@1 {
++					reg = <1>;
++
++					wifi2_wsi_rx: endpoint {
++						remote-endpoint = <&wifi1_wsi_tx>;
++					};
++				};
++			};
++		};
++	};
++};
++
++&pcie3_phy {
++	status = "okay";
++};
++
++&pcie3 {
++	pinctrl-0 = <&pcie3_default>;
++	pinctrl-names = "default";
++
++	perst-gpios = <&tlmm 32 GPIO_ACTIVE_LOW>;
++	wake-gpios = <&tlmm 33 GPIO_ACTIVE_LOW>;
++	status = "okay";
++
++	pcie@0,0 {
++		device_type = "pci";
++		reg = <0x0 0x0 0x2 0x0 0x0>;
++		#address-cells = <3>;
++		#size-cells = <2>;
++		ranges;
++
++		wifi@0 {
++
++			compatible = "pci17cb,1109";
++			reg = <0x0 0x0 0x0 0x0 0x0>;
++			qcom,calibration-variant = "Askey-SBE1V1K_2";
++
++			nvmem-cells = <&ethaddr (-2)>;
++			nvmem-cell-names = "mac-address";
++
++			ports {
++				#address-cells = <1>;
++				#size-cells = <0>;
++
++				port@0 {
++					reg = <0>;
++
++					wifi3_wsi_tx: endpoint {
++						remote-endpoint = <&wifi1_wsi_rx>;
++					};
++				};
++
++				port@1 {
++					reg = <1>;
++
++					wifi3_wsi_rx: endpoint {
++						remote-endpoint = <&wifi2_wsi_tx>;
++					};
++				};
++			};
++		};
++	};
++};
+diff --git a/target/linux/qualcommbe/image/ipq95xx.mk b/target/linux/qualcommbe/image/ipq95xx.mk
+index 0017ff41a8..a6a5a693de 100644
+--- a/target/linux/qualcommbe/image/ipq95xx.mk
++++ b/target/linux/qualcommbe/image/ipq95xx.mk
+@@ -14,6 +14,23 @@ define Device/8devices_kiwi-dvk
+ endef
+ TARGET_DEVICES += 8devices_kiwi-dvk
+ 
++define Device/askey_sbe1v1k
++	$(call Device/FitImage)
++	$(call Device/EmmcImage)
++	DEVICE_VENDOR := Askey
++	DEVICE_MODEL := SBE1V1K
++	DEVICE_ALT0_VENDOR := Askey
++	DEVICE_ALT0_MODEL := RTQ7300T
++	DEVICE_ALT1_VENDOR := Spectrum
++	DEVICE_ALT1_MODEL := SBE1V1K
++	DEVICE_DTS_CONFIG := config@rtq7300t-rev0
++	KERNEL_LOADADDR := 0x42080000
++	SOC := ipq9570
++	DEVICE_PACKAGES := ath12k-firmware-qcn9274 f2fsck ipq-wifi-askey_sbe1v1k kmod-ath12k \
++		kmod-hwmon-pwmfan kmod-phy-realtek mkfsck mkf2fs rtl826x-firmware
++endef
++TARGET_DEVICES += askey_sbe1v1k
++
+ define Device/qcom_rdp433
+ 	$(call Device/FitImageLzma)
+ 	DEVICE_VENDOR := Qualcomm Technologies, Inc.
+diff --git a/target/linux/qualcommbe/ipq95xx/base-files/etc/board.d/02_network b/target/linux/qualcommbe/ipq95xx/base-files/etc/board.d/02_network
+index efc47418a4..f0d77702c9 100644
+--- a/target/linux/qualcommbe/ipq95xx/base-files/etc/board.d/02_network
++++ b/target/linux/qualcommbe/ipq95xx/base-files/etc/board.d/02_network
+@@ -14,6 +14,9 @@ ipq95xx_setup_interfaces()
+ 	8devices,kiwi-dvk)
+ 		ucidef_set_interfaces_lan_wan "lan1 lan2" "wan"
+ 		;;
++	askey,sbe1v1k)
++		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3" "wan"
++		;;
+ 	qcom,ipq9574-ap-al02-c7)
+ 		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4 lan5" "wan"
+ 		;;
+@@ -23,9 +26,25 @@ ipq95xx_setup_interfaces()
+ 	esac
+ }
+ 
++DEV_PATH_PCIE0=soc@0/10000000.pcie/pci0001:00/0001:00:00.0/0001:01:00.0
++DEV_PATH_PCIE1=soc@0/18000000.pcie/pci0003:00/0003:00:00.0/0003:01:00.0
++DEV_PATH_PCIE2=soc@0/20000000.pcie/pci0002:00/0002:00:00.0/0002:01:00.0
++
++ipq95xx_setup_wlan()
++{
++	local board="$1"
++
++	case "$board" in
++	askey,sbe1v1k)
++		ucidef_add_wlan "$DEV_PATH_PCIE0" "$DEV_PATH_PCIE1" "$DEV_PATH_PCIE2"
++		;;
++	esac
++}
++
+ board_config_update
+ board=$(board_name)
+ ipq95xx_setup_interfaces $board
++ipq95xx_setup_wlan $board
+ board_config_flush
+ 
+ exit 0
+diff --git a/target/linux/qualcommbe/ipq95xx/base-files/etc/hotplug.d/firmware/11-ath12k-caldata b/target/linux/qualcommbe/ipq95xx/base-files/etc/hotplug.d/firmware/11-ath12k-caldata
+new file mode 100644
+index 0000000000..3bdb743a3d
+--- /dev/null
++++ b/target/linux/qualcommbe/ipq95xx/base-files/etc/hotplug.d/firmware/11-ath12k-caldata
+@@ -0,0 +1,34 @@
++#!/bin/sh
++
++[ -e /lib/firmware/$FIRMWARE ] && exit 0
++
++. /lib/functions/caldata.sh
++
++board=$(board_name)
++
++case "$FIRMWARE" in
++"ath12k/QCN9274/hw2.0/cal-pci-0001:01:00.0.bin")
++	case "$board" in
++	askey,sbe1v1k)
++		caldata_extract_mmc "0:ART" 0x58800 0x2d000
++		;;
++	esac
++	;;
++"ath12k/QCN9274/hw2.0/cal-pci-0002:01:00.0.bin")
++	case "$board" in
++	askey,sbe1v1k)
++		caldata_extract_mmc "0:ART" 0x8a800 0x2d000
++		;;
++	esac
++	;;
++"ath12k/QCN9274/hw2.0/cal-pci-0003:01:00.0.bin")
++	case "$board" in
++	askey,sbe1v1k)
++		caldata_extract_mmc "0:ART" 0xbc800 0x2d000
++		;;
++	esac
++	;;
++*)
++	exit 1
++	;;
++esac
+diff --git a/target/linux/qualcommbe/ipq95xx/base-files/lib/upgrade/platform.sh b/target/linux/qualcommbe/ipq95xx/base-files/lib/upgrade/platform.sh
+index a7711e509f..03eadef67f 100644
+--- a/target/linux/qualcommbe/ipq95xx/base-files/lib/upgrade/platform.sh
++++ b/target/linux/qualcommbe/ipq95xx/base-files/lib/upgrade/platform.sh
+@@ -15,6 +15,12 @@ platform_do_upgrade() {
+ 		CI_ROOTPART="rootfs"
+ 		emmc_do_upgrade "$1"
+ 		;;
++	askey,sbe1v1k)
++		CI_KERNPART="0:HLOS"
++		CI_ROOTPART="rootfs"
++		CI_DATAPART="rootfs_data"
++		emmc_do_upgrade "$1"
++		;;
+ 	*)
+ 		default_do_upgrade "$1"
+ 		;;
+@@ -23,7 +29,8 @@ platform_do_upgrade() {
+ 
+ platform_copy_config() {
+ 	case "$(board_name)" in
+-	8devices,kiwi-dvk)
++	8devices,kiwi-dvk|\
++	askey,sbe1v1k)
+ 		emmc_copy_config
+ 		;;
+ 	esac
