@@ -1,0 +1,5 @@
+SBE1V1K Codex Stable Preview 2
+Build date: 2026-08-01
+Base: luckkyboy/SBE1V1K 02fb9517c9
+Purpose: mainline qualcommbe stability, US tri-band Wi-Fi, and recovery testing
+Hardware acceleration: upstream PPE Ethernet driver only; no experimental QSDK ECM/NSS fast path
