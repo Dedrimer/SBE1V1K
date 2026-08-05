@@ -31,10 +31,10 @@ bash ./build-sbe1v1k.sh
 ```
 
 可用 `bash ./build-sbe1v1k.sh --help` 查看并行数、清理构建和仅下载等选项。脚本会继承
-`HTTP_PROXY`、`HTTPS_PROXY` 等标准代理环境变量。固件默认包含 LuCI 软件包管理器、
-Docker、Aria2、Samba、文件管理器、Web 终端、SmartDNS、广告过滤、流量统计、SQM、
-DDNS、UPnP、WireGuard 和常见 USB 存储文件系统，提供接近 iStore 的常用服务体验，
-同时仅使用仓库中已锁定的 OpenWrt 官方 feeds。
+`HTTP_PROXY`、`HTTPS_PROXY` 等标准代理环境变量。固件默认使用 Argon 主题并预置
+iStore，同时包含 LuCI 软件包管理器、Docker、Aria2、Samba、文件管理器、Web 终端、
+SmartDNS、广告过滤、流量统计、SQM、DDNS、UPnP、WireGuard 和 eMMC 管理工具。
+OpenWrt 官方 feeds、Argon 与 iStore 源均固定到精确提交以便复现构建。
 
 也可以手动执行以下步骤。
 
@@ -59,9 +59,17 @@ cd SBE1V1K
 # 否则 find -execdir 会在 package/install 阶段拒绝执行。
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-./scripts/feeds update -a
-./scripts/feeds install -a
 cp configs/sbe1v1k.config .config
+./scripts/feeds update -a
+patch --batch --forward -d feeds/istore -p1 < config/istore-openwrt-main.patch
+./scripts/feeds install -a
+mkdir -p feeds/argon
+git -C feeds/argon init
+git -C feeds/argon remote add origin https://github.com/jerrykuku/luci-theme-argon.git
+git -C feeds/argon fetch --depth 1 origin 136eb5d42f30554e89cc737fd90f503909810660
+git -C feeds/argon checkout --detach --force FETCH_HEAD
+mkdir -p package/feeds/argon
+rsync -a --delete --exclude=.git/ feeds/argon/ package/feeds/argon/luci-theme-argon/
 make defconfig
 make download -j"$(nproc)"
 make -j"$(nproc)" world

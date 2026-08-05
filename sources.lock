@@ -36,6 +36,13 @@ ROUTING_FEED_COMMIT=c7872431105f69894201dc522b7560e47d1e8ba9
 TELEPHONY_FEED_COMMIT=5d68d53c160a325ea9d03fce393e051573bcc736
 VIDEO_FEED_COMMIT=a951381b6c58b9b1eb087f09c9a20cff4ffe8063
 
+# Optional LuCI experience packages pinned for reproducible firmware builds.
+ARGON_REPOSITORY=https://github.com/jerrykuku/luci-theme-argon.git
+ARGON_COMMIT=136eb5d42f30554e89cc737fd90f503909810660
+ISTORE_REPOSITORY=https://github.com/linkease/istore.git
+ISTORE_COMMIT=7c5c69796fd9798610a56a80e1895aa9033e1e6c
+ISTORE_OPENWRT_MAIN_COMPAT_PATCH=config/istore-openwrt-main.patch
+
 # Optional second-stage U-Boot / HTTP recovery. Not an OpenWrt build dependency.
 HTTP_UBOOT_REPOSITORY=https://github.com/YYH2913/http-uboot.git
 HTTP_UBOOT_BRANCH=sbe1v1k

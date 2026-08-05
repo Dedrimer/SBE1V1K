@@ -191,12 +191,51 @@ if ((CLEAN_BUILD)); then
 	make dirclean
 fi
 
+log "Preparing the SBE1V1K firmware configuration"
+cp configs/sbe1v1k.config .config
+
 log "Updating and installing locked OpenWrt feeds"
 ./scripts/feeds update -a
+
+istore_makefile="$SOURCE_DIR/feeds/istore/luci/luci-app-store/Makefile"
+istore_patch="$SOURCE_DIR/config/istore-openwrt-main.patch"
+legacy_istore_dependency="LUCI_DEPENDS+=\$(if \$(CONFIG_USE_APK)"
+[[ -f "$istore_makefile" ]] || die "the locked iStore source was not downloaded"
+if grep -Fq "$legacy_istore_dependency" "$istore_makefile"; then
+	patch --batch --forward -d "$SOURCE_DIR/feeds/istore" -p1 < "$istore_patch"
+elif ! grep -Fq '+USE_APK:luci-compat' "$istore_makefile"; then
+	die "the locked iStore source does not match the expected dependency format"
+fi
+
 ./scripts/feeds install -a
 
+argon_source="$SOURCE_DIR/feeds/argon"
+argon_target="$SOURCE_DIR/package/feeds/argon/luci-theme-argon"
+argon_repository="https://github.com/jerrykuku/luci-theme-argon.git"
+argon_commit="136eb5d42f30554e89cc737fd90f503909810660"
+if [[ -d "$argon_source/.git" ]]; then
+	git -C "$argon_source" remote set-url origin "$argon_repository"
+else
+	[[ ! -e "$argon_source" ]] || die "cannot initialize Argon over an existing path: $argon_source"
+	mkdir -p "$argon_source"
+	git -C "$argon_source" init
+	git -C "$argon_source" remote add origin "$argon_repository"
+fi
+git -C "$argon_source" fetch --depth 1 origin "$argon_commit"
+git -C "$argon_source" checkout --detach --force FETCH_HEAD
+git -C "$argon_source" clean -fdx
+[[ "$(git -C "$argon_source" rev-parse HEAD)" == "$argon_commit" ]] || die "Argon commit verification failed"
+[[ -f "$argon_source/Makefile" ]] || die "the locked Argon source was not downloaded"
+mkdir -p "$(dirname "$argon_target")"
+if [[ -L "$argon_target" ]]; then
+	rm -f -- "$argon_target"
+elif [[ -e "$argon_target" && ! -d "$argon_target" ]]; then
+	die "cannot install Argon over an existing non-symlink path: $argon_target"
+fi
+mkdir -p "$argon_target"
+rsync -a --delete --exclude=.git/ "$argon_source/" "$argon_target/"
+
 log "Applying the SBE1V1K firmware configuration"
-cp configs/sbe1v1k.config .config
 make defconfig
 
 while IFS= read -r package_config; do
