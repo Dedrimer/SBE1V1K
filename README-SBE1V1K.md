@@ -23,6 +23,21 @@ d5ed1d2f5d wifi: ath12k: set per-radio MAC address from DT
 
 ## Ubuntu / WSL2 编译
 
+推荐在仓库根目录运行全自动脚本。它会识别 Debian/Ubuntu、Fedora/RHEL、Arch
+或 openSUSE，安装编译依赖、同步锁定的 feeds、载入 SBE1V1K 配置、下载源码并完成编译：
+
+```bash
+bash ./build-sbe1v1k.sh
+```
+
+可用 `bash ./build-sbe1v1k.sh --help` 查看并行数、清理构建和仅下载等选项。脚本会继承
+`HTTP_PROXY`、`HTTPS_PROXY` 等标准代理环境变量。固件默认包含 LuCI 软件包管理器、
+Docker、Aria2、Samba、文件管理器、Web 终端、SmartDNS、广告过滤、流量统计、SQM、
+DDNS、UPnP、WireGuard 和常见 USB 存储文件系统，提供接近 iStore 的常用服务体验，
+同时仅使用仓库中已锁定的 OpenWrt 官方 feeds。
+
+也可以手动执行以下步骤。
+
 先安装依赖：
 
 ```bash
