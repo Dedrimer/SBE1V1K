@@ -1,4 +1,4 @@
-From: Codex <codex@openai.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Subject: [PATCH] wifi: ath12k: accept PPE flowtable binding on direct VAPs
 
 fw4 expands a bridged LAN into all lower devices before it creates its
@@ -16,7 +16,8 @@ early firewall reload can install a flowtable before the VAP is usable by
 PPEDS. Keep all other TC requests and non-direct-switch ath12k devices
 unsupported.
 
-Signed-off-by: Codex <codex@openai.com>
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/wireless/ath/ath12k/mac.c | 40 ++++++++++++++++++++++++++++++++++++++++
  1 file changed, 40 insertions(+)

@@ -1,11 +1,14 @@
-From: OpenWrt Project <openwrt-devel@lists.openwrt.org>
+From: Yanghan Ye <yyh94306@gmail.com>
 Subject: [PATCH] net: ethernet: qualcomm: ppe: add direct-switch core
 
 Add the native IPQ9574 EDMA direct-switch core and allow WLAN clients to
 bind virtual ports directly to the three reserved PPE queue/ring sets.
 Keep the PPE as a module and leave the normal EDMA ring ranges untouched.
 
-Signed-off-by: OpenWrt Project <openwrt-devel@lists.openwrt.org>
+Link: https://git.codelinaro.org/clo/qsdk/oss/lklm/nss-ppe/-/tree/87bb9b326dfe7ddafb2cc8bc588e74d552a2a9b5
+Based-on: https://git.codelinaro.org/clo/qsdk/oss/lklm/nss-ppe/-/commit/82d0ffed35565b7b3e2fb440ff58e0e50c7d4297
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/ethernet/qualcomm/ppe/Makefile | 2 +-
  drivers/net/ethernet/qualcomm/ppe/ppe.c    | 10 ++++++++++

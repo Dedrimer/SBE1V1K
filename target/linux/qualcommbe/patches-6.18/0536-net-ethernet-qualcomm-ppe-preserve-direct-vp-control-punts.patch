@@ -1,4 +1,4 @@
-From: YYH2913 <yyh2913@qq.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Thu, 23 Jul 2026 00:30:00 +0800
 Subject: [PATCH] net: ethernet: qualcomm: ppe: preserve direct VP control punts
 
@@ -14,7 +14,10 @@ and destination-delivery counters, record the last service code, and expose
 the active VP state through debugfs. This localizes missing DHCP without
 guessing from aggregate PPE counters.
 
-Signed-off-by: YYH2913 <yyh2913@qq.com>
+Link: https://git.codelinaro.org/clo/qsdk/oss/lklm/nss-ppe/-/tree/87bb9b326dfe7ddafb2cc8bc588e74d552a2a9b5
+Based-on: https://git.codelinaro.org/clo/qsdk/oss/lklm/nss-ppe/-/commit/564c94d6cd7ad91f8f0339fc9790826d5195ef45
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/ethernet/qualcomm/ppe/edma_rx.c     |  17 ++-
  drivers/net/ethernet/qualcomm/ppe/edma_rx.h     |   3 +

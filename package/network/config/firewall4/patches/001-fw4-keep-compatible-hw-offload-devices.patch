@@ -1,4 +1,4 @@
-From: OpenWrt PPE integration <noreply@openwrt.org>
+From: Yanghan Ye <yyh94306@gmail.com>
 Subject: [PATCH] fw4: retain hardware offload on compatible devices
 
 fw4 currently validates all flowtable devices as one hardware-offload
@@ -12,6 +12,8 @@ the hardware flowtable for that set. This leaves PPE-capable Wi-Fi and
 Ethernet interfaces accelerated in configurations which also contain
 VPN, container, or other software-only interfaces.
 
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  root/usr/share/ucode/fw4.uc | 38 ++++++++++++++++++++++++++++++++++----
  1 file changed, 30 insertions(+), 8 deletions(-)

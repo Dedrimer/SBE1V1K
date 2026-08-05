@@ -1,4 +1,4 @@
-From: YYH2913 <yyh2913@qq.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Wed, 15 Jul 2026 12:00:00 +0800
 Subject: [PATCH] partname: resolve PARTLABEL root devices
 
@@ -11,7 +11,8 @@ overlay after the squashfs image instead.
 Resolve PARTLABEL through sysfs first, then use the existing
 sibling-partition scan on the root block device.
 
-Signed-off-by: YYH2913 <yyh2913@qq.com>
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  libfstools/partname.c | 44 ++++++++++++++++++++++++++++++++++++++++++++
  1 file changed, 44 insertions(+)

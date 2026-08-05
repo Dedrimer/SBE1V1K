@@ -1,4 +1,4 @@
-From: YYH2913 <yyh2913@qq.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Fri, 17 Jul 2026 12:00:00 +0800
 Subject: [PATCH] wifi: ath12k: stabilize WSI radio order
 
@@ -15,7 +15,8 @@ pdev order.
 This keeps the cfg80211 radio indices, per-radio addresses and wiphy parent
 device stable without adding another device-tree property.
 
-Signed-off-by: YYH2913 <yyh2913@qq.com>
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/wireless/ath/ath12k/mac.c | 60 +++++++++++++++++----------
  1 file changed, 37 insertions(+), 23 deletions(-)

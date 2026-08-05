@@ -1,4 +1,4 @@
-From: OpenWrt
+From: Yanghan Ye <yyh94306@gmail.com>
 Subject: [PATCH] net: ethernet: qualcomm: ppe: clear lifecycle L3 interfaces
 
 The reserved PPPoE and VLAN-uplink slots own L3 interface rows, but their
@@ -12,6 +12,9 @@ slot and its lower-layer dependency cannot be reused underneath stale
 hardware state.  Also retry the complete VLAN cleanup during flowtable
 teardown.
 
+Link: https://git.codelinaro.org/clo/qsdk/oss/lklm/nss-ppe/-/tree/87bb9b326dfe7ddafb2cc8bc588e74d552a2a9b5
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 --- a/drivers/net/ethernet/qualcomm/ppe/ppe_flowtable.c
 +++ b/drivers/net/ethernet/qualcomm/ppe/ppe_flowtable.c
 @@ -694,15 +694,29 @@ static int ppe_ft_pppoe_dev_get(struct p

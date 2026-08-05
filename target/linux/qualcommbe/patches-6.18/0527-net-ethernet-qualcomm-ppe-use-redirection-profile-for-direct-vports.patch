@@ -1,4 +1,4 @@
-From: Codex <codex@openai.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Wed, 22 Jul 2026 19:00:00 +0800
 Subject: [PATCH] net: ethernet: qualcomm: ppe: use redirection profile for direct vports
 
@@ -8,7 +8,9 @@ virtual ports on the EDMA CPU profile, but let direct vports select the
 separate profile so their eight-queue sets are not affected by EDMA RSS
 queue offsets.
 
-Signed-off-by: Codex <codex@openai.com>
+Link: https://git.codelinaro.org/clo/qsdk/oss/lklm/nss-ppe/-/tree/87bb9b326dfe7ddafb2cc8bc588e74d552a2a9b5
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/ethernet/qualcomm/ppe/ppe_config.h |  1 +
  drivers/net/ethernet/qualcomm/ppe/ppe_vp.c     | 39 +++++++++++++++---------

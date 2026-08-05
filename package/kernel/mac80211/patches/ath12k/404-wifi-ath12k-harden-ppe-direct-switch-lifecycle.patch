@@ -1,4 +1,4 @@
-From: YYH2913 <yyh2913@qq.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Wed, 22 Jul 2026 16:30:00 +0800
 Subject: [PATCH] wifi: ath12k: harden PPE direct-switch lifecycle
 
@@ -8,7 +8,11 @@ the VP profile, restore PPE routing registers after UMAC reset, and
 reprogram existing VP entries as vdevs restart.  Only the associated STA
 link owns the shared AST search entry.
 
-Signed-off-by: YYH2913 <yyh2913@qq.com>
+Based-on: cc51c4d638df1d1ab4d1e90c957f4c588e57d577
+Link: https://git.codelinaro.org/clo/qsdk/oss/system/feeds/wlan-open/-/blob/1ee3a4ab7c59ceaff347c4668fc6c7604a04c323/patches/ath12k/0348-QSDK-DP-wifi-ath12k-Enable-UMAC-reset-support-for-DS-mode.patch
+Based-on: https://git.codelinaro.org/clo/qsdk/oss/lklm/nss-ppe/-/commit/b75a2535c456c487835fd924d088082d1e74d596
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/wireless/ath/ath12k/dp.c    | 36 ++++++-
  drivers/net/wireless/ath/ath12k/dp.h    |  1 +

@@ -1,4 +1,4 @@
-From: Codex <codex@openai.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Wed, 22 Jul 2026 12:00:00 +0800
 Subject: [PATCH] net: ethernet: qualcomm: ppe: quiesce direct virtual ports
 
@@ -12,7 +12,9 @@ possible, and otherwise disable the hardware port until its node restarts.
 Reject new flow references while no node is available and keep the
 flowtable carrier state synchronized with the hardware state.
 
-Signed-off-by: Codex <codex@openai.com>
+Link: https://git.codelinaro.org/clo/qsdk/oss/lklm/nss-ppe/-/tree/87bb9b326dfe7ddafb2cc8bc588e74d552a2a9b5
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/ethernet/qualcomm/ppe/ppe_vp.c | 103 +++++++++++++++++++--
  drivers/net/ethernet/qualcomm/ppe/ppe_vp.h |   1 +

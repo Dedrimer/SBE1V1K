@@ -1,4 +1,4 @@
-From: Codex <codex@openai.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Subject: [PATCH] wifi: ath12k: select WMI endpoints for QCN9274 AMSS mode
 
 QCN9274 hw2 supports both single-PHY and split-PHY firmware.  The
@@ -12,7 +12,10 @@ Remember the AMSS mode selected from the QCN9274 OTP board ID and select
 the single-PHY WMI mode before HTC is initialized when regular AMSS is in
 use.  Keep the two-endpoint setup for boards that select amss_dualmac.
 
-Signed-off-by: Codex <codex@openai.com>
+Based-on: 45b54d3221a7e1123a2282c8fd42b7819b01828d
+Link: https://git.codelinaro.org/clo/qsdk/oss/system/feeds/wlan-open/-/blob/1ee3a4ab7c59ceaff347c4668fc6c7604a04c323/patches/ath12k/0127-QSDK-PLATFORM-wifi-ath12k-Enable-amss_dualmac.bin-lo.patch
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/wireless/ath/ath12k/core.h |  1 +
  drivers/net/wireless/ath/ath12k/mhi.c  |  2 ++

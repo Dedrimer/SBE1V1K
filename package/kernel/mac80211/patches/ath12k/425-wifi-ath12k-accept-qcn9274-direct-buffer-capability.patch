@@ -1,4 +1,4 @@
-From: Codex <codex@openai.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Subject: [PATCH] wifi: ath12k: accept QCN9274 direct-buffer capability
 
 QCN9274 firmware advertises the CV upload direct-buffer module during the
@@ -7,7 +7,11 @@ the capability parser to reject the whole TLV with "Invalid module id 2".
 Accept the firmware-defined module IDs so WMI initialization continues with
 the advertised capabilities intact.
 
-Signed-off-by: Codex <codex@openai.com>
+Based-on: 1838228b17c223ca6ae3f8ce2932329825f258eb
+Based-on: 75420b29865d30ff1abfbb41d2f45ba1ce94667b
+Link: https://git.codelinaro.org/clo/qsdk/oss/system/feeds/wlan-open/-/blob/1ee3a4ab7c59ceaff347c4668fc6c7604a04c323/patches/ath12k/0342-QSDK-CP-add-WMI_CONFIG_MODULE_WIFI_RADAR-to-enum-wmi.patch
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/wireless/ath/ath12k/wmi.h | 2 ++
  1 file changed, 2 insertions(+)

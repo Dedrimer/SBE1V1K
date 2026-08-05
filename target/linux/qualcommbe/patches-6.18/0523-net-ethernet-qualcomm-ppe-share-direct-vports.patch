@@ -1,4 +1,4 @@
-From: YYH2913 <yyh2913@qq.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Wed, 22 Jul 2026 16:00:00 +0800
 Subject: [PATCH] net: ethernet: qualcomm: ppe: share direct virtual ports
 
@@ -8,7 +8,10 @@ move the static fallback queue when the owning node disappears.  Native
 flowtable offload has no per-peer MLO classifier, but this keeps all
 uplinks usable and prevents a second link from failing with -EBUSY.
 
-Signed-off-by: YYH2913 <yyh2913@qq.com>
+Link: https://git.codelinaro.org/clo/qsdk/oss/lklm/nss-ppe/-/tree/87bb9b326dfe7ddafb2cc8bc588e74d552a2a9b5
+Based-on: https://git.codelinaro.org/clo/qsdk/oss/lklm/nss-ppe/-/commit/e3e21d5f441e0f456ba7115eb75a1cdc8ff3ea45
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/ethernet/qualcomm/ppe/ppe_vp.c | 89 +++++++++++++++++++++++++---
  drivers/net/ethernet/qualcomm/ppe/ppe_vp.h |  2 +-

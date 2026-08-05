@@ -1,4 +1,4 @@
-From: YYH2913 <yyh2913@qq.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Wed, 22 Jul 2026 20:10:00 +0800
 Subject: [PATCH] wifi: ath12k: restore PPE ring indices after restart
 
@@ -8,7 +8,10 @@ HAL SRNG caches at the empty positions selected by the PPE direct-switch
 core.  Starting one side at zero after SSR otherwise makes EDMA consume
 stale descriptors or stalls the direct path entirely.
 
-Signed-off-by: YYH2913 <yyh2913@qq.com>
+Based-on: cc51c4d638df1d1ab4d1e90c957f4c588e57d577
+Based-on: https://git.codelinaro.org/clo/qsdk/oss/lklm/nss-ppe/-/commit/25a5a8b3c8ea7b90df5666290c42cfc8f5090533
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/wireless/ath/ath12k/ppe.c | 61 +++++++++++++++++++++++++++
  1 file changed, 61 insertions(+)

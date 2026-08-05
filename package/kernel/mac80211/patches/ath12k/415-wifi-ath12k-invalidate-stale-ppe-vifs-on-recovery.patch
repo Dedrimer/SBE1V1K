@@ -1,4 +1,4 @@
-From: Codex <codex@openai.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Wed, 22 Jul 2026 22:05:00 +0800
 Subject: [PATCH] wifi: ath12k: invalidate stale PPE vifs on recovery
 
@@ -14,7 +14,8 @@ callback order.  Do not release the cached bank in either path: the old
 bank table is destroyed by datapath teardown and may already have been
 reinitialized when the attach fallback runs.
 
-Signed-off-by: Codex <codex@openai.com>
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/wireless/ath/ath12k/core.c |  8 +++++++-
  drivers/net/wireless/ath/ath12k/ppe.c  | 13 +++++++++++--

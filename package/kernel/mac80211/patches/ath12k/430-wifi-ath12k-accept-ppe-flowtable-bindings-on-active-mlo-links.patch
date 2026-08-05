@@ -1,4 +1,4 @@
-From: Codex <codex@openai.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Subject: [PATCH] wifi: ath12k: accept PPE flowtable bindings on active MLO links
 
 fw4 probes every lower device of a bridge before it creates an offloaded
@@ -13,7 +13,8 @@ MLO links under RCU. A VAP is an acceptable flowtable member as soon as
 any link has an allocated direct-switch VP; per-peer routing still selects
 the precise radio when a flow is installed.
 
-Signed-off-by: Codex <codex@openai.com>
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/wireless/ath/ath12k/mac.c | 35 ++++++++++++++++++++++++++++++---
  1 file changed, 31 insertions(+), 4 deletions(-)

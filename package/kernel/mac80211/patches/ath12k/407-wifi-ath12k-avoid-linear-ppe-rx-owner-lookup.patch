@@ -1,4 +1,4 @@
-From: YYH2913 <yyh2913@qq.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Wed, 22 Jul 2026 12:00:00 +0800
 Subject: [PATCH] wifi: ath12k: avoid linear PPE RX owner lookup
 
@@ -12,7 +12,8 @@ those to resolve the device and look the descriptor up through the existing
 SPT helper in constant time.  Validate the returned address first and require
 the SPT lookup to reproduce the exact pointer before accepting it.
 
-Signed-off-by: YYH2913 <yyh2913@qq.com>
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/wireless/ath/ath12k/ppe.c | 29 ++++++++++++++---------------
  1 file changed, 14 insertions(+), 15 deletions(-)

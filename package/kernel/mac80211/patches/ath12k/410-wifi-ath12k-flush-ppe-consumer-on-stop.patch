@@ -1,4 +1,4 @@
-From: Codex <codex@openai.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Wed, 22 Jul 2026 12:15:00 +0800
 Subject: [PATCH] wifi: ath12k: flush PPE consumer during stop
 
@@ -9,7 +9,8 @@ EDMA position even while the rest of direct switching is quiesced.  This
 keeps both owners synchronized across the next start and avoids replaying
 already-completed descriptors after recovery.
 
-Signed-off-by: Codex <codex@openai.com>
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/wireless/ath/ath12k/ppe.c | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)

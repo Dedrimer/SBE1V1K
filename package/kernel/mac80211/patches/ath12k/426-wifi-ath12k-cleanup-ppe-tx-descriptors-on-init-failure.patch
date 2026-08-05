@@ -1,4 +1,4 @@
-From: Codex <codex@openai.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Subject: [PATCH] wifi: ath12k: clean up PPE TX descriptors on init failure
 
 The PPE descriptor pool is allocated one page at a time.  If a later page
@@ -9,7 +9,8 @@ could therefore leak the pool until the device ran out of memory.
 Use the normal descriptor cleanup path for the partial allocation and keep
 the failure path idempotent for the caller's subsequent cleanup.
 
-Signed-off-by: Codex <codex@openai.com>
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/wireless/ath/ath12k/ppe.c | 5 ++++-
  1 file changed, 4 insertions(+), 1 deletion(-)

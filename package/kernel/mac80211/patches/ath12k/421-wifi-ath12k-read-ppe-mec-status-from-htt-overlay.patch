@@ -1,4 +1,4 @@
-From: YYH2913 <yyh2913@qq.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Thu, 23 Jul 2026 02:10:00 +0800
 Subject: [PATCH] wifi: ath12k: read PPE MEC status from the HTT overlay
 
@@ -12,7 +12,10 @@ Cast the descriptor to the HTT overlay before filtering MEC notifications.
 Its leading reserved words already account for the status offset, matching
 the final QSDK layout after its HTT_TX_WBM_COMP_STATUS_OFFSET cleanup.
 
-Signed-off-by: YYH2913 <yyh2913@qq.com>
+Based-on: 27de30f7c1e9832d82d6ef03adf0aed8fee3a513
+Link: https://git.codelinaro.org/clo/qsdk/oss/system/feeds/wlan-open/-/blob/1ee3a4ab7c59ceaff347c4668fc6c7604a04c323/patches/ath12k/0531-UPSTREAM-DP-wifi-ath12k-Remove-the-usage-of-HTT_TX_W.patch
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/wireless/ath/ath12k/ppe.c | 12 ++++++++----
  1 file changed, 8 insertions(+), 4 deletions(-)

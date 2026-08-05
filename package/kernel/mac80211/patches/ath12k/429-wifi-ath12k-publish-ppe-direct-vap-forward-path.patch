@@ -1,4 +1,4 @@
-From: Codex <codex@openai.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Subject: [PATCH] wifi: ath12k: publish PPE direct VAP forwarding path
 
 ath12k enables mac80211's Ethernet encapsulation mode on QCN9274. In
@@ -20,7 +20,8 @@ hardware flow.
 
 Keep all non-PPEDS VAPs on the existing unsupported path.
 
-Signed-off-by: Codex <codex@openai.com>
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/wireless/ath/ath12k/mac.c | 41 +++++++++++++++++++++++++++++++++++++++++
  1 file changed, 41 insertions(+)

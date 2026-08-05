@@ -1,4 +1,4 @@
-From: YYH2913 <yyh2913@qq.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Thu, 23 Jul 2026 00:20:00 +0800
 Subject: [PATCH] wifi: ath12k: offload AP VLAN WDS peers to PPE
 
@@ -17,7 +17,10 @@ the logical parent and peer relationship across channel changes and
 firmware recovery, while invalidating hardware VP state before the PPE
 datapath is rebuilt.
 
-Signed-off-by: YYH2913 <yyh2913@qq.com>
+Based-on: ba31901cc92e3aa4aa2799876745af447b8a8bae
+Link: https://git.codelinaro.org/clo/qsdk/oss/system/feeds/wlan-open/-/blob/1ee3a4ab7c59ceaff347c4668fc6c7604a04c323/patches/ath12k/0337-10-QSDK-DP-wifi-Enable-DS-support-for-WDS-AP_VLAN-inter.patch
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/wireless/ath/ath12k/core.c |   5 +-
  drivers/net/wireless/ath/ath12k/core.h |  17 ++

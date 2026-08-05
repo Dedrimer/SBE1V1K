@@ -1,4 +1,4 @@
-From: YYH2913 <yyh2913@qq.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Wed, 22 Jul 2026 22:00:00 +0800
 Subject: [PATCH] wifi: ath12k: batch PPE direct-switch completions
 
@@ -14,7 +14,10 @@ by their WSI source device and return each group in one transaction, matching
 the vendor driver's batched refill model.  Mark a descriptor CPU-owned before
 queuing it so a duplicate completion cannot insert the same list node twice.
 
-Signed-off-by: YYH2913 <yyh2913@qq.com>
+Based-on: 41c027804556a6adc68fa0d79400fb96655a909e
+Link: https://git.codelinaro.org/clo/qsdk/oss/system/feeds/wlan-open/-/blob/1ee3a4ab7c59ceaff347c4668fc6c7604a04c323/patches/ath12k/0486-QSDK-DP-wifi-ath12k-Fixes-to-improve-DS-DL-performan.patch
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/wireless/ath/ath12k/ppe.c | 90 ++++++++++++++++++++++------------
  1 file changed, 60 insertions(+), 30 deletions(-)
@@ -23,7 +26,7 @@ Signed-off-by: YYH2913 <yyh2913@qq.com>
 +++ b/drivers/net/wireless/ath/ath12k/ppe.c
 @@ -78,18 +78,18 @@ ath12k_ppe_ds_tx_desc_valid(struct ath12
  ath12k_ppe_ds_tx_desc_valid(struct ath12k_base *ab,
-			    struct ath12k_ppe_ds_tx_desc *desc)
+ 			    struct ath12k_ppe_ds_tx_desc *desc)
  {
 -	struct ath12k_ppe_ds *ppe = &ab->dp.ppe_ds;
 -	int i;

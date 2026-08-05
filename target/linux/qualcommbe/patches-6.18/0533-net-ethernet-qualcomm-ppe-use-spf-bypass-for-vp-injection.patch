@@ -1,4 +1,4 @@
-From: Codex <codex@openai.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Wed, 22 Jul 2026 22:00:00 +0800
 Subject: [PATCH] net: ethernet: qualcomm: ppe: use SPF bypass for VP injection
 
@@ -11,7 +11,10 @@ Configure the same service-code entry and put it in source-VP EDMA
 descriptors.  Without it the PPE can reject the wireless uplink at source
 port filtering instead of matching the installed routed flow.
 
-Signed-off-by: Codex <codex@openai.com>
+Link: https://git.codelinaro.org/clo/qsdk/oss/lklm/nss-ppe/-/tree/87bb9b326dfe7ddafb2cc8bc588e74d552a2a9b5
+Based-on: https://git.codelinaro.org/clo/qsdk/oss/lklm/nss-ppe/-/commit/d2fb3254b6f3b3f1d4cf8f3d1db4cf1d14f442ff
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/ethernet/qualcomm/ppe/edma_tx.c    | 12 +++++++-----
  drivers/net/ethernet/qualcomm/ppe/ppe_config.c | 18 ++++++++++++++++--

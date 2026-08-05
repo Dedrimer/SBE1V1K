@@ -1,4 +1,4 @@
-From: Codex <codex@openai.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Wed, 22 Jul 2026 23:55:00 +0800
 Subject: [PATCH] net: ethernet: qualcomm: ppe: configure direct vport L3 interface
 
@@ -20,7 +20,9 @@ normal teardown clear the MAC, binding and L3 rows.  Attempt every cleanup
 operation, preserve the first error and quarantine a slot whose hardware
 could not be cleared.
 
-Signed-off-by: Codex <codex@openai.com>
+Link: https://git.codelinaro.org/clo/qsdk/oss/lklm/nss-ppe/-/tree/87bb9b326dfe7ddafb2cc8bc588e74d552a2a9b5
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/ethernet/qualcomm/ppe/ppe_flowtable.c |  13 +-
  drivers/net/ethernet/qualcomm/ppe/ppe_flowtable.h |   1 +

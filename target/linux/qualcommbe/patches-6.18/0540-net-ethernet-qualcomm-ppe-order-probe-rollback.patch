@@ -1,4 +1,4 @@
-From: Codex <codex@openai.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Subject: [PATCH] net: ethernet: qualcomm: ppe: order direct-switch probe rollback
 
 The direct-switch setup runs after the PPE ports, flowtable and virtual
@@ -12,7 +12,9 @@ Quiesce virtual-port injection, unregister the PPE ports, then drain the
 flowtable before tearing down the virtual ports.  This gives both normal
 remove and the probe-error path the same lifetime ordering.
 
-Signed-off-by: Codex <codex@openai.com>
+Link: https://git.codelinaro.org/clo/qsdk/oss/lklm/nss-ppe/-/tree/87bb9b326dfe7ddafb2cc8bc588e74d552a2a9b5
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
 --- a/drivers/net/ethernet/qualcomm/ppe/ppe.c
 +++ b/drivers/net/ethernet/qualcomm/ppe/ppe.c

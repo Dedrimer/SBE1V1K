@@ -1,4 +1,4 @@
-From: OpenWrt Project <openwrt-devel@lists.openwrt.org>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Thu, 23 Jul 2026 12:00:00 +0800
 Subject: [PATCH] net: ethernet: qualcomm: edma: fix port ring lifetime
 
@@ -14,7 +14,9 @@ RCU and withdraw them before unregister_netdev(), whose network grace period
 then protects readers that already borrowed the pointer.  Allocate the array
 as pointers rather than full struct net_device objects as well.
 
-Signed-off-by: OpenWrt Project <openwrt-devel@lists.openwrt.org>
+Link: https://git.codelinaro.org/clo/qsdk/oss/lklm/nss-ppe/-/tree/87bb9b326dfe7ddafb2cc8bc588e74d552a2a9b5
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/ethernet/qualcomm/ppe/edma.c        |  5 ++---
  drivers/net/ethernet/qualcomm/ppe/edma.h        |  2 +-

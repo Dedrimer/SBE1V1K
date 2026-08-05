@@ -1,4 +1,4 @@
-From: YYH2913 <yyh2913@qq.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Wed, 22 Jul 2026 21:00:00 +0800
 Subject: [PATCH] net: ethernet: qualcomm: ppe: track virtual port MTU
 
@@ -12,7 +12,9 @@ Use redirect-to-CPU for both failures so an oversized frame remains on
 the software path.  Program the row before publishing a new virtual-port
 binding and roll the hardware port back if the MTU setup fails.
 
-Signed-off-by: YYH2913 <yyh2913@qq.com>
+Link: https://git.codelinaro.org/clo/qsdk/oss/lklm/nss-ppe/-/tree/87bb9b326dfe7ddafb2cc8bc588e74d552a2a9b5
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/ethernet/qualcomm/ppe/ppe_vp.c | 70 ++++++++++++++++++++++
  1 file changed, 70 insertions(+)

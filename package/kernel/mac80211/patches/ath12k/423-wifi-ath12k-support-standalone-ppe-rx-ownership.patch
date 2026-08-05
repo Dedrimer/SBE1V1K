@@ -1,4 +1,4 @@
-From: OpenWrt
+From: Yanghan Ye <yyh94306@gmail.com>
 Subject: [PATCH] wifi: ath12k: support standalone PPE RX ownership
 
 The direct-switch attach path explicitly supports a standalone QCN9274 by
@@ -10,6 +10,8 @@ Resolve descriptors against the local device in standalone mode and walk the
 fixed-size owner array.  This keeps grouped WSI validation unchanged while
 avoiding both leaked RX buffers and a NULL dereference on a standalone radio.
 
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 --- a/drivers/net/wireless/ath/ath12k/ppe.c
 +++ b/drivers/net/wireless/ath/ath12k/ppe.c
 @@ -435,16 +435,23 @@ ath12k_ppe_ds_rx_desc_owner(struct ath12

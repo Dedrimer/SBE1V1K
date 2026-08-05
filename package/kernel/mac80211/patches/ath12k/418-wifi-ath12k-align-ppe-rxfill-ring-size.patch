@@ -1,4 +1,4 @@
-From: Codex <codex@openai.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Wed, 22 Jul 2026 23:45:00 +0800
 Subject: [PATCH] wifi: ath12k: align PPE RX fill ring size
 
@@ -12,7 +12,9 @@ buffers per radio without increasing the number of WLAN descriptors that
 can be in flight.  Match the vendor profile while keeping the larger WLAN
 ring and the existing refill budget.
 
-Signed-off-by: Codex <codex@openai.com>
+Based-on: https://git.codelinaro.org/clo/qsdk/oss/lklm/nss-ppe/-/commit/30c5fe84ec4636f91eed86750c28903f64ff9433
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/wireless/ath/ath12k/ppe.c | 3 ++-
  1 file changed, 2 insertions(+), 1 deletion(-)

@@ -1,4 +1,4 @@
-From: YYH2913 <yyh2913@qq.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Thu, 23 Jul 2026 03:00:00 +0800
 Subject: [PATCH] wifi: mac80211: notify drivers about AP VLAN data offload
 
@@ -17,7 +17,10 @@ When a station moves away from a 4-address VLAN, notify the old interface
 before changing sta->sdata.  This prevents a hardware peer route from
 remaining attached to the old VLAN while a new route is installed.
 
-Signed-off-by: YYH2913 <yyh2913@qq.com>
+Based-on: ba31901cc92e3aa4aa2799876745af447b8a8bae
+Link: https://git.codelinaro.org/clo/qsdk/oss/system/feeds/wlan-open/-/blob/1ee3a4ab7c59ceaff347c4668fc6c7604a04c323/patches/ath12k/0337-10-QSDK-DP-wifi-Enable-DS-support-for-WDS-AP_VLAN-inter.patch
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  include/net/mac80211.h    | 19 +++++++++++++++++++
  net/mac80211/cfg.c        | 10 +++++++++-

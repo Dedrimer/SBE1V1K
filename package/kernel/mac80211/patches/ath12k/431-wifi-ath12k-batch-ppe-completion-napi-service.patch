@@ -1,4 +1,4 @@
-From: Codex <codex@openai.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Fri, 24 Jul 2026 22:10:00 +0800
 Subject: [PATCH] wifi: ath12k: batch PPE completion NAPI service
 
@@ -14,7 +14,10 @@ is exhausted, report the whole NAPI budget so the poll remains scheduled;
 otherwise report the amortized work count.  This prevents an incomplete
 completion ring from being mistaken for an idle one.
 
-Signed-off-by: Codex <codex@openai.com>
+Based-on: 41c027804556a6adc68fa0d79400fb96655a909e
+Link: https://git.codelinaro.org/clo/qsdk/oss/system/feeds/wlan-open/-/blob/1ee3a4ab7c59ceaff347c4668fc6c7604a04c323/patches/ath12k/0486-QSDK-DP-wifi-ath12k-Fixes-to-improve-DS-DL-performan.patch
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/wireless/ath/ath12k/dp.c  | 22 ++++++++++++++++++++--
  drivers/net/wireless/ath/ath12k/ppe.h |  2 ++

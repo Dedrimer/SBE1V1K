@@ -1,4 +1,4 @@
-From: Codex <codex@openai.com>
+From: Yanghan Ye <yyh94306@gmail.com>
 Date: Wed, 22 Jul 2026 23:00:00 +0800
 Subject: [PATCH] wifi: ath12k: optimize PPE direct-switch TX completions
 
@@ -13,7 +13,10 @@ teardown out of the ring critical section.  Also ignore firmware MEC
 notifications; they do not own a PPE TX descriptor and treating their
 overlaid fields as a cookie can release an unrelated buffer.
 
-Signed-off-by: Codex <codex@openai.com>
+Based-on: 41c027804556a6adc68fa0d79400fb96655a909e
+Link: https://git.codelinaro.org/clo/qsdk/oss/system/feeds/wlan-open/-/blob/1ee3a4ab7c59ceaff347c4668fc6c7604a04c323/patches/ath12k/0486-QSDK-DP-wifi-ath12k-Fixes-to-improve-DS-DL-performan.patch
+Assisted-by: Codex:GPT-5.6-sol
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
  drivers/net/wireless/ath/ath12k/pci.c | 13 +++++++++++--
  drivers/net/wireless/ath/ath12k/ppe.c | 46 +++++++++++++++++++++++++++++++++--
