@@ -12,6 +12,31 @@ INSTALL_DEPS=1
 CLEAN_BUILD=0
 DOWNLOAD_ONLY=0
 RETRY_SERIAL=1
+BUILD_STARTED_AT=0
+BUILD_FINISHED_AT=0
+
+format_duration() {
+	local total_seconds="$1"
+	local hours=$((total_seconds / 3600))
+	local minutes=$(((total_seconds % 3600) / 60))
+	local seconds=$((total_seconds % 60))
+	printf '%02d:%02d:%02d' "$hours" "$minutes" "$seconds"
+}
+
+report_build_time() {
+	local exit_code=$?
+	local finished_at elapsed status
+
+	((BUILD_STARTED_AT > 0)) || return "$exit_code"
+	finished_at="${BUILD_FINISHED_AT:-0}"
+	((finished_at > 0)) || finished_at="$(date +%s)"
+	elapsed=$((finished_at - BUILD_STARTED_AT))
+	status="failed"
+	((exit_code == 0)) && status="completed"
+	printf '\n\033[1;36m==> Firmware compilation %s in %s\033[0m\n' \
+		"$status" "$(format_duration "$elapsed")"
+	return "$exit_code"
+}
 
 usage() {
 	cat <<'EOF'
@@ -252,6 +277,8 @@ if ((DOWNLOAD_ONLY)); then
 fi
 
 log "Building SBE1V1K firmware with $JOBS jobs"
+BUILD_STARTED_AT="$(date +%s)"
+trap report_build_time EXIT
 if ! make -j"$JOBS" world; then
 	if ((RETRY_SERIAL)); then
 		log "Parallel build failed; retrying serially with verbose output"
@@ -260,8 +287,10 @@ if ! make -j"$JOBS" world; then
 		die "firmware build failed"
 	fi
 fi
+BUILD_FINISHED_AT="$(date +%s)"
 
-output_dir="$SOURCE_DIR/bin/targets/qualcommbe/ipq95xx"
+output_root="$SOURCE_DIR/out"
+output_dir="$output_root/targets/qualcommbe/ipq95xx"
 sysupgrade_image="$(find "$output_dir" -maxdepth 1 -type f -name '*askey_sbe1v1k*squashfs-sysupgrade.bin' -print -quit 2>/dev/null || true)"
 initramfs_image="$(find "$output_dir" -maxdepth 1 -type f -name '*askey_sbe1v1k*initramfs-uImage.itb' -print -quit 2>/dev/null || true)"
 
@@ -269,6 +298,10 @@ initramfs_image="$(find "$output_dir" -maxdepth 1 -type f -name '*askey_sbe1v1k*
 [[ -n "$initramfs_image" ]] || die "build finished without the expected SBE1V1K initramfs image"
 
 log "Build completed successfully"
+build_elapsed=$((BUILD_FINISHED_AT - BUILD_STARTED_AT))
+build_duration="$(format_duration "$build_elapsed")"
+printf 'Compilation time: %s (%d seconds)\n' "$build_duration" "$build_elapsed" | tee "$output_root/build-time.txt"
 printf 'Initramfs: %s\n' "$initramfs_image"
 printf 'Sysupgrade: %s\n' "$sysupgrade_image"
 sha256sum "$initramfs_image" "$sysupgrade_image"
+trap - EXIT

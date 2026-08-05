@@ -60,7 +60,7 @@ make -j"$(nproc)" world
 输出目录：
 
 ```text
-bin/targets/qualcommbe/ipq95xx/
+out/targets/qualcommbe/ipq95xx/
 ```
 
 ## 固件选择

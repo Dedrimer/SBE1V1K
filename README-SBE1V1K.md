@@ -35,6 +35,8 @@ bash ./build-sbe1v1k.sh
 iStore，同时包含 LuCI 软件包管理器、Docker、Aria2、Samba、文件管理器、Web 终端、
 SmartDNS、广告过滤、流量统计、SQM、DDNS、UPnP、WireGuard 和 eMMC 管理工具。
 OpenWrt 官方 feeds、Argon 与 iStore 源均固定到精确提交以便复现构建。
+脚本会统计固件编译耗时，所有固件、软件包索引和构建信息统一写入根目录 `out/`；
+需要清理输出时可直接删除该目录，`out/` 已加入 `.gitignore`。
 
 也可以手动执行以下步骤。
 
@@ -78,9 +80,11 @@ make -j"$(nproc)" world
 五个官方 feeds 已在 `feeds.conf.default` 中固定到精确提交。目标输出在：
 
 ```text
-bin/targets/qualcommbe/ipq95xx/openwrt-qualcommbe-ipq95xx-askey_sbe1v1k-initramfs-uImage.itb
-bin/targets/qualcommbe/ipq95xx/openwrt-qualcommbe-ipq95xx-askey_sbe1v1k-squashfs-sysupgrade.bin
+out/targets/qualcommbe/ipq95xx/openwrt-qualcommbe-ipq95xx-askey_sbe1v1k-initramfs-uImage.itb
+out/targets/qualcommbe/ipq95xx/openwrt-qualcommbe-ipq95xx-askey_sbe1v1k-squashfs-sysupgrade.bin
 ```
+
+本次固件编译耗时保存在 `out/build-time.txt`。
 
 若并行构建失败：
 

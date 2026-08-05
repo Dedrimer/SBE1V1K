@@ -34,8 +34,8 @@ make -j8 V=s
 
 ```sh
 ./sbe1v1k-tests/test-upgrade-validation.sh
-tar tf bin/targets/qualcommbe/ipq95xx/*sbe1v1k*sysupgrade.bin
-sha256sum bin/targets/qualcommbe/ipq95xx/*sbe1v1k*
+tar tf out/targets/qualcommbe/ipq95xx/*sbe1v1k*sysupgrade.bin
+sha256sum out/targets/qualcommbe/ipq95xx/*sbe1v1k*
 ```
 
 ## Required hardware validation

@@ -66,7 +66,7 @@ make -j"$(nproc)" world
 Images are written to:
 
 ```text
-bin/targets/qualcommbe/ipq95xx/
+out/targets/qualcommbe/ipq95xx/
 ```
 
 ## Choosing an image

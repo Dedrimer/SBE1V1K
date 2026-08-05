@@ -122,7 +122,7 @@ git switch author-head
 make -j1 V=s
 ```
 
-输出目录为 `bin/targets/qualcommbe/ipq95xx/`，本流程需要的两个文件通常是：
+输出目录为 `out/targets/qualcommbe/ipq95xx/`，本流程需要的两个文件通常是：
 
 ```text
 openwrt-qualcommbe-ipq95xx-askey_sbe1v1k-initramfs-uImage.itb
@@ -268,7 +268,7 @@ fw_printenv bootargs bootcmd do_boot
 在 PC 上复制镜像：
 
 ```bash
-scp bin/targets/qualcommbe/ipq95xx/\
+scp out/targets/qualcommbe/ipq95xx/\
 openwrt-qualcommbe-ipq95xx-askey_sbe1v1k-squashfs-sysupgrade.bin \
 root@192.168.1.1:/tmp/sbe1v1k-sysupgrade.bin
 ```
