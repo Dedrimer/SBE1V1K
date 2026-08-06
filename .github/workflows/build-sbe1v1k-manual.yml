@@ -82,6 +82,7 @@ jobs:
           name: sbe1v1k-build-${{ github.run_number }}
           if-no-files-found: warn
           retention-days: 14
+          include-hidden-files: true
           path: |
             .build-logs/
             out/
