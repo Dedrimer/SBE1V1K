@@ -41,6 +41,17 @@ OpenWrt 官方 feeds、Argon 与 iStore 源均固定到精确提交以便复现�
 `make dirclean` 删除，便于在失败后直接提供日志。脚本会在配置后校验 OpenWrt 的实际
 输出根目录；即使旧的 `bin/` 中仍有历史固件，本次构建也只会检查和报告 `out/` 中的产物。
 
+## CachyOS / Arch 编译
+
+CachyOS/Arch 系发行版请使用专用脚本，依赖全部来自官方仓库（不需要 AUR）：
+
+```bash
+bash ./build-sbe1v1k-cachyos.sh
+```
+
+fish 等其它 shell 下同样直接运行即可；选项与原脚本一致（`-j/--jobs`、`--clean`、
+`--download-only`、`--skip-deps`、`--no-retry`），详见 `bash ./build-sbe1v1k-cachyos.sh --help`。
+
 也可以手动执行以下步骤。
 
 先安装依赖：
