@@ -195,10 +195,19 @@ install_dependencies() {
 		die "pacman was not found; this script is for CachyOS/Arch Linux. Use --skip-deps if dependencies are already installed"
 	fi
 	log "Installing CachyOS/Arch Linux build dependencies (official repos only)"
-	run_as_root pacman -Syu --needed --noconfirm \
-		base-devel clang flex bison gawk gettext git ncurses openssl \
-		python python-setuptools rsync swig unzip zlib file wget curl \
+
+	local -a packages=(
+		base-devel clang flex bison gawk gettext git ncurses openssl
+		python python-setuptools rsync swig unzip file wget curl
 		ca-certificates bc bzip2 elfutils xz zstd patch perl time vim libxslt
+	)
+	if pacman -Q zlib-ng-compat >/dev/null 2>&1; then
+		log "zlib-ng-compat is installed and already provides zlib headers and libz; skipping the conflicting zlib package"
+	else
+		packages+=(zlib)
+	fi
+
+	run_as_root pacman -Syu --needed --noconfirm "${packages[@]}"
 }
 
 if ((INSTALL_DEPS)); then
