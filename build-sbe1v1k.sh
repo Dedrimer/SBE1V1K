@@ -7,6 +7,22 @@ readonly SCRIPT_PATH
 SOURCE_DIR="$(dirname "$SCRIPT_PATH")"
 readonly SOURCE_DIR
 
+if [[ -z "${BUILD_LOG_FILE:-}" ]]; then
+	BUILD_LOG_FILE="$SOURCE_DIR/.build-logs/build-$(date +%Y%m%d-%H%M%S)-$$.log"
+fi
+mkdir -p "$(dirname "$BUILD_LOG_FILE")"
+BUILD_LOG_FILE="$(cd "$(dirname "$BUILD_LOG_FILE")" && pwd -P)/$(basename "$BUILD_LOG_FILE")"
+export BUILD_LOG_FILE
+if [[ -z "${BUILD_LOG_ACTIVE:-}" ]]; then
+	export BUILD_LOG_ACTIVE=1
+	exec > >(tee -a "$BUILD_LOG_FILE") 2>&1
+fi
+printf '\n===== SBE1V1K build started: %s =====\n' "$(date --iso-8601=seconds)"
+printf 'Script: %s\nSource: %s\nLog: %s\nCommand: bash %q\n' \
+	"$SCRIPT_PATH" "$SOURCE_DIR" "$BUILD_LOG_FILE" "$*"
+SCRIPT_STARTED_AT="${SCRIPT_STARTED_AT:-$(date +%s)}"
+export SCRIPT_STARTED_AT
+
 JOBS="${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 1)}"
 INSTALL_DEPS=1
 CLEAN_BUILD=0
@@ -25,18 +41,26 @@ format_duration() {
 
 report_build_time() {
 	local exit_code=$?
-	local finished_at elapsed status
+	local finished_at compilation_finished_at elapsed status script_elapsed
 
-	((BUILD_STARTED_AT > 0)) || return "$exit_code"
-	finished_at="${BUILD_FINISHED_AT:-0}"
-	((finished_at > 0)) || finished_at="$(date +%s)"
-	elapsed=$((finished_at - BUILD_STARTED_AT))
+	finished_at="$(date +%s)"
 	status="failed"
 	((exit_code == 0)) && status="completed"
-	printf '\n\033[1;36m==> Firmware compilation %s in %s\033[0m\n' \
-		"$status" "$(format_duration "$elapsed")"
+	if ((BUILD_STARTED_AT > 0)); then
+		compilation_finished_at="$finished_at"
+		((BUILD_FINISHED_AT > 0)) && compilation_finished_at="$BUILD_FINISHED_AT"
+		elapsed=$((compilation_finished_at - BUILD_STARTED_AT))
+		printf '\n==> Firmware compilation %s in %s\n' \
+			"$status" "$(format_duration "$elapsed")"
+	fi
+	script_elapsed=$((finished_at - SCRIPT_STARTED_AT))
+	printf '===== SBE1V1K build %s: %s (exit code %d) =====\n' \
+		"$status" "$(date --iso-8601=seconds)" "$exit_code"
+	printf 'Total script time: %s\n' "$(format_duration "$script_elapsed")"
 	return "$exit_code"
 }
+
+trap report_build_time EXIT
 
 usage() {
 	cat <<'EOF'
@@ -57,6 +81,8 @@ Environment:
   JOBS=N             Alternative way to set parallel jobs
   HTTP_PROXY=URL     Proxy inherited by package managers, Git and downloads
   HTTPS_PROXY=URL    HTTPS proxy inherited by package managers, Git and downloads
+  BUILD_LOG_FILE=PATH
+                     Override the full execution log path
 
 Supported dependency installers: apt, dnf, pacman and zypper.
 Run as a normal user with sudo access. Direct root execution creates an
@@ -113,15 +139,16 @@ done
 	die "the script must remain in the OpenWrt source root"
 
 cd "$SOURCE_DIR"
+OUTPUT_ROOT="$SOURCE_DIR/out"
+readonly OUTPUT_ROOT
+mkdir -p "$OUTPUT_ROOT"
 
 case_probe="$SOURCE_DIR/.openwrt-case-probe-$$"
-trap 'rm -f -- "${case_probe}.lower"' EXIT
 touch "${case_probe}.lower" || die "the source directory is not writable: $SOURCE_DIR"
 if [[ -e "${case_probe}.LOWER" ]]; then
 	die "OpenWrt requires a case-sensitive filesystem; clone the repository into a native Linux filesystem"
 fi
 rm -f -- "${case_probe}.lower"
-trap - EXIT
 
 proxy_env=()
 for proxy_name in HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy NO_PROXY no_proxy; do
@@ -195,6 +222,7 @@ if ((EUID == 0)); then
 	[[ -n "$build_home" ]] || die "cannot determine the home directory for $build_user"
 	log "Transferring the source tree to unprivileged builder: $build_user"
 	chown -R "$build_user:$(id -gn "$build_user")" "$SOURCE_DIR"
+	chown "$build_user:$(id -gn "$build_user")" "$BUILD_LOG_FILE"
 
 	build_args=(--skip-deps --jobs "$JOBS")
 	((CLEAN_BUILD)) && build_args+=(--clean)
@@ -202,7 +230,7 @@ if ((EUID == 0)); then
 	((RETRY_SERIAL)) || build_args+=(--no-retry)
 
 	exec runuser -u "$build_user" -- env \
-		HOME="$build_home" "${proxy_env[@]}" \
+		HOME="$build_home" BUILD_LOG_FILE="$BUILD_LOG_FILE" BUILD_LOG_ACTIVE=1 SCRIPT_STARTED_AT="$SCRIPT_STARTED_AT" "${proxy_env[@]}" \
 		/bin/bash "$SCRIPT_PATH" "${build_args[@]}"
 fi
 
@@ -211,13 +239,18 @@ if [[ "$available_kib" =~ ^[0-9]+$ ]] && ((available_kib < 20 * 1024 * 1024)); t
 	die "at least 20 GiB of free disk space is required (currently $((available_kib / 1024 / 1024)) GiB)"
 fi
 
-if ((CLEAN_BUILD)); then
-	log "Cleaning previous build products"
-	make dirclean
-fi
-
 log "Preparing the SBE1V1K firmware configuration"
 cp configs/sbe1v1k.config .config
+
+if ((CLEAN_BUILD)); then
+	log "Cleaning previous build products"
+	make CONFIG_BINARY_FOLDER="$OUTPUT_ROOT" dirclean
+fi
+
+printf 'Git commit: '; git rev-parse HEAD
+printf 'Kernel: '; uname -a
+printf 'Working directory filesystem: '; df -T "$SOURCE_DIR" | awk 'NR == 2 { print $2 }'
+printf 'Available disk space: '; df -h "$SOURCE_DIR" | awk 'NR == 2 { print $4 }'
 
 log "Updating and installing locked OpenWrt feeds"
 ./scripts/feeds update -a
@@ -261,7 +294,13 @@ mkdir -p "$argon_target"
 rsync -a --delete --exclude=.git/ "$argon_source/" "$argon_target/"
 
 log "Applying the SBE1V1K firmware configuration"
-make defconfig
+make CONFIG_BINARY_FOLDER="$OUTPUT_ROOT" defconfig
+configured_output_dir="$(make -s CONFIG_BINARY_FOLDER="$OUTPUT_ROOT" val.OUTPUT_DIR)"
+expected_output_dir="$(readlink -f "$OUTPUT_ROOT")"
+actual_output_dir="$(readlink -f "$configured_output_dir")"
+[[ "$actual_output_dir" == "$expected_output_dir" ]] || \
+	die "OpenWrt output directory mismatch: expected $expected_output_dir, got $actual_output_dir"
+printf 'Verified OpenWrt output directory: %s\n' "$actual_output_dir"
 
 while IFS= read -r package_config; do
 	grep -qx "${package_config}=y" .config || \
@@ -269,7 +308,7 @@ while IFS= read -r package_config; do
 done < <(sed -n 's/^\(CONFIG_PACKAGE_[A-Za-z0-9_.+-]*\)=y$/\1/p' configs/sbe1v1k.config)
 
 log "Downloading all source archives with $JOBS jobs"
-make download -j"$JOBS"
+make CONFIG_BINARY_FOLDER="$OUTPUT_ROOT" download -j"$JOBS"
 
 if ((DOWNLOAD_ONLY)); then
 	log "Downloads completed; build skipped by request"
@@ -278,19 +317,23 @@ fi
 
 log "Building SBE1V1K firmware with $JOBS jobs"
 BUILD_STARTED_AT="$(date +%s)"
-trap report_build_time EXIT
-if ! make -j"$JOBS" world; then
+output_dir="$OUTPUT_ROOT/targets/qualcommbe/ipq95xx"
+mkdir -p "$output_dir"
+case "$output_dir" in
+	"$OUTPUT_ROOT"/*) ;;
+	*) die "refusing to clean output outside OUTPUT_ROOT: $output_dir" ;;
+esac
+find "$output_dir" -maxdepth 1 -type f -name '*askey_sbe1v1k*' -delete
+if ! make CONFIG_BINARY_FOLDER="$OUTPUT_ROOT" -j"$JOBS" world; then
 	if ((RETRY_SERIAL)); then
 		log "Parallel build failed; retrying serially with verbose output"
-		make -j1 V=s world
+		make CONFIG_BINARY_FOLDER="$OUTPUT_ROOT" -j1 V=s world
 	else
 		die "firmware build failed"
 	fi
 fi
 BUILD_FINISHED_AT="$(date +%s)"
 
-output_root="$SOURCE_DIR/out"
-output_dir="$output_root/targets/qualcommbe/ipq95xx"
 sysupgrade_image="$(find "$output_dir" -maxdepth 1 -type f -name '*askey_sbe1v1k*squashfs-sysupgrade.bin' -print -quit 2>/dev/null || true)"
 initramfs_image="$(find "$output_dir" -maxdepth 1 -type f -name '*askey_sbe1v1k*initramfs-uImage.itb' -print -quit 2>/dev/null || true)"
 
@@ -300,8 +343,7 @@ initramfs_image="$(find "$output_dir" -maxdepth 1 -type f -name '*askey_sbe1v1k*
 log "Build completed successfully"
 build_elapsed=$((BUILD_FINISHED_AT - BUILD_STARTED_AT))
 build_duration="$(format_duration "$build_elapsed")"
-printf 'Compilation time: %s (%d seconds)\n' "$build_duration" "$build_elapsed" | tee "$output_root/build-time.txt"
+printf 'Compilation time: %s (%d seconds)\n' "$build_duration" "$build_elapsed" | tee "$OUTPUT_ROOT/build-time.txt"
 printf 'Initramfs: %s\n' "$initramfs_image"
 printf 'Sysupgrade: %s\n' "$sysupgrade_image"
 sha256sum "$initramfs_image" "$sysupgrade_image"
-trap - EXIT

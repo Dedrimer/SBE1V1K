@@ -8,6 +8,7 @@
 /.toolchain_build_ver
 /bin
 /out
+/.build-logs
 /build_dir
 /staging_dir
 /tmp

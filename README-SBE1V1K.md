@@ -37,6 +37,9 @@ SmartDNS、广告过滤、流量统计、SQM、DDNS、UPnP、WireGuard 和 eMMC 
 OpenWrt 官方 feeds、Argon 与 iStore 源均固定到精确提交以便复现构建。
 脚本会统计固件编译耗时，所有固件、软件包索引和构建信息统一写入根目录 `out/`；
 需要清理输出时可直接删除该目录，`out/` 已加入 `.gitignore`。
+完整执行日志保存在 `.build-logs/build-YYYYMMDD-HHMMSS-PID.log`，该目录不会被
+`make dirclean` 删除，便于在失败后直接提供日志。脚本会在配置后校验 OpenWrt 的实际
+输出根目录；即使旧的 `bin/` 中仍有历史固件，本次构建也只会检查和报告 `out/` 中的产物。
 
 也可以手动执行以下步骤。
 
