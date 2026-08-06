@@ -1,0 +1,87 @@
+name: Manual SBE1V1K firmware build
+
+on:
+  workflow_dispatch:
+    inputs:
+      jobs:
+        description: 'Parallel make jobs'
+        required: false
+        type: number
+        default: 4
+      clean:
+        description: 'Run make dirclean before configuring'
+        required: false
+        type: boolean
+        default: true
+      retry_serial:
+        description: 'Retry a failed parallel build with -j1 V=s'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build on GitHub-hosted x86_64 Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Show host and compiler information
+        run: |
+          set -euxo pipefail
+          uname -a
+          printf '\nArchitecture: '; uname -m
+          printf '\nCPU summary:\n'; lscpu
+          printf '\nCPU flags:\n'; lscpu | sed -n '/Flags:/,$p'
+          printf '\nCompiler:\n'; gcc --version || true
+          printf '\nEnvironment flags:\n'
+          env | grep -E '^(CC|CXX|CFLAGS|CXXFLAGS|CPPFLAGS|LDFLAGS|MAKEFLAGS|JOBS)=' || true
+          printf '\nDisk:\n'; df -h
+
+      - name: Build SBE1V1K firmware
+        env:
+          BUILD_JOBS: ${{ inputs.jobs }}
+          BUILD_CLEAN: ${{ inputs.clean }}
+          BUILD_RETRY_SERIAL: ${{ inputs.retry_serial }}
+        run: |
+          set -euxo pipefail
+          args=(--jobs "$BUILD_JOBS")
+          if [[ "$BUILD_CLEAN" == true ]]; then
+            args+=(--clean)
+          fi
+          if [[ "$BUILD_RETRY_SERIAL" != true ]]; then
+            args+=(--no-retry)
+          fi
+          bash ./build-sbe1v1k.sh "${args[@]}"
+
+      - name: Re-run lz4 host tool with verbose output
+        if: failure()
+        run: |
+          set -euxo pipefail
+          mkdir -p .build-logs
+          {
+            printf '\n===== Focused lz4 host-tool retry: %s =====\n' "$(date --iso-8601=seconds)"
+            make CONFIG_BINARY_FOLDER="$GITHUB_WORKSPACE/out" -j1 V=s tools/lz4/compile
+          } 2>&1 | tee .build-logs/lz4-focused-retry.log
+
+      - name: Upload build logs and firmware
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbe1v1k-build-${{ github.run_number }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            .build-logs/
+            out/
