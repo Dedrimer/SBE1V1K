@@ -1,0 +1,21 @@
+{
+	"admin/system/sbe1v1k_diag": {
+		"title": "SBE1V1K 诊断",
+		"order": 90,
+		"action": {
+			"type": "view",
+			"path": "sbe1v1k_diag/status"
+		},
+		"depends": {
+			"acl": [ "luci-app-sbe1v1k-diag" ]
+		}
+	},
+
+	"admin/system/sbe1v1k_diag/status": {
+		"action": {
+			"type": "function",
+			"module": "luci.controller.sbe1v1k_diag",
+			"function": "action_status"
+		}
+	}
+}
