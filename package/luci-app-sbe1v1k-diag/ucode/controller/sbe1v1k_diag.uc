@@ -7,12 +7,15 @@
  */
 
 import { open, glob, stat, popen, basename } from 'fs';
-import { uci } from 'uci';
+import { cursor } from 'uci';
 
 const MAX_READ = 65536;
 
-function read_text(path, maxlen = MAX_READ)
+function read_text(path, maxlen)
 {
+	if (maxlen == null)
+		maxlen = MAX_READ;
+
 	let fd = open(path, 'r');
 
 	if (!fd)
@@ -68,7 +71,7 @@ function find_eip_node()
 
 function collect()
 {
-	let cu = uci.cursor();
+	let cu = cursor();
 	let ppe_nodes = {};
 	let ppe_paths = {
 		qm: '/sys/kernel/debug/ppe/qm',
