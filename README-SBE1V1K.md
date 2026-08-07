@@ -101,6 +101,17 @@ out/targets/qualcommbe/ipq95xx/openwrt-qualcommbe-ipq95xx-askey_sbe1v1k-squashfs
 
 本次固件编译耗时保存在 `out/build-time.txt`。
 
+## 状态 LED 与硬件监控
+
+- 状态 LED:`green:status` 使用反转的 kernel heartbeat 触发(默认常亮,系统活动时闪烁),
+  由 `target/linux/qualcommbe/ipq95xx/base-files/etc/uci-defaults/10-sbe1v1k-status-led` 在首次启动时写入配置。
+- PPE / EIP / Wi-Fi 诊断工具已随固件内置,无需额外安装:
+  - `ppe-diag`:PPE 硬件加速状态与计数器(`/sys/kernel/debug/ppe/*`)
+  - `eip-diag`:EIP-197 加密加速器状态(`/sys/kernel/debug/qca-nss-eip/*`)
+  - `wifi-rate-diag`:Wi-Fi 7 速率与 PPE 直通诊断
+  - 防火墙硬件卸载由 `/etc/init.d/ppe-offload` 保持 `flow_offloading_hw=1`
+- IPQ9570 NPU:当前内核与 feeds 中暂无 NPU 监控软件包,暂无可监控项。
+
 若并行构建失败：
 
 ```bash

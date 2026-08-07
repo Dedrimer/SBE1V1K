@@ -1,0 +1,26 @@
+#!/bin/sh
+#
+# SBE1V1K: status LED (green:status) with an inverted kernel heartbeat.
+# The LED is lit by default and blinks on system activity: the heartbeat
+# trigger's invert attribute is enabled and the LED is pre-set to on.
+#
+# The uci led helpers cannot express this combination, so write the
+# section directly after config_generate has produced /etc/config/system.
+
+. /lib/functions/uci-defaults.sh
+
+case "$(board_name)" in
+askey,sbe1v1k)
+	uci -q batch <<-EOF
+		set system.green_status='led'
+		set system.green_status.name='green:status'
+		set system.green_status.sysfs='green:status'
+		set system.green_status.trigger='heartbeat'
+		set system.green_status.default='1'
+		set system.green_status.inverted='1'
+		commit system
+	EOF
+	;;
+esac
+
+exit 0
