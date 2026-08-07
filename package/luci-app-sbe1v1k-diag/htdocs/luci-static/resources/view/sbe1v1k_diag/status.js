@@ -23,9 +23,8 @@ function fetchData()
 function section(title, body)
 {
 	return E('div', { 'class': 'cbi-section-node' }, [
-		E('h3', {}, [ title ]),
-		body
-	]);
+		E('h3', {}, [ title ])
+	].concat(Array.isArray(body) ? body : [ body ]));
 }
 
 function preBlock(text)
@@ -160,16 +159,17 @@ return view.extend({
 				]),
 				section(_('ath12k DP 统计'), (function() {
 					var keys = Object.keys(ppe.ath12k_dp_stats || {});
+					var nodes = keys.map(function(k) {
+						return E('div', { 'class': 'sbe1v1k-node' }, [
+							E('div', { 'class': 'sbe1v1k-node-name' }, [ esc(k) ]),
+							preBlock(ppe.ath12k_dp_stats[k])
+						]);
+					});
 
-					return E('div', { 'class': 'sbe1v1k-nodes' }, [
-						keys.map(function(k) {
-							return E('div', { 'class': 'sbe1v1k-node' }, [
-								E('div', { 'class': 'sbe1v1k-node-name' }, [ esc(k) ]),
-								preBlock(ppe.ath12k_dp_stats[k])
-							]);
-						}),
-						keys.length ? null : E('div', {}, [ _('未找到 ath12k DP 统计节点') ])
-					]);
+					if (!keys.length)
+						nodes.push(E('div', {}, [ _('未找到 ath12k DP 统计节点') ]));
+
+					return E('div', { 'class': 'sbe1v1k-nodes' }, nodes);
 				})())
 			]),
 
@@ -194,16 +194,17 @@ return view.extend({
 				])),
 				section(_('EIP 节点'), (function() {
 					var keys = Object.keys(eip.stats || {});
+					var nodes = keys.map(function(k) {
+						return E('div', { 'class': 'sbe1v1k-node' }, [
+							E('div', { 'class': 'sbe1v1k-node-name' }, [ esc(k) ]),
+							preBlock(eip.stats[k])
+						]);
+					});
 
-					return E('div', { 'class': 'sbe1v1k-nodes' }, [
-						keys.map(function(k) {
-							return E('div', { 'class': 'sbe1v1k-node' }, [
-								E('div', { 'class': 'sbe1v1k-node-name' }, [ esc(k) ]),
-								preBlock(eip.stats[k])
-							]);
-						}),
-						keys.length ? null : E('div', {}, [ _('未找到 EIP 统计节点') ])
-					]);
+					if (!keys.length)
+						nodes.push(E('div', {}, [ _('未找到 EIP 统计节点') ]));
+
+					return E('div', { 'class': 'sbe1v1k-nodes' }, nodes);
 				})())
 			]),
 
