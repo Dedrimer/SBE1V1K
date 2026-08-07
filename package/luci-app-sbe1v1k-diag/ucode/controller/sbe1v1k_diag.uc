@@ -98,7 +98,6 @@ function collect()
 		}
 	}
 
-	cu.load('system');
 	cu.load('firewall');
 
 	for (let key in ppe_paths)
@@ -146,24 +145,10 @@ function collect()
 	eip.stats = grep_files([ 'ring_*', 'eip_ipsec_ctx@*', 'eip_hy_ipsec_ctx@*', 'ipsectun*', 'aead/stats', 'skcipher/stats', 'ahash/stats' ]);
 	eip.flow_table = read_text('/sys/kernel/debug/qca-nss-eip/eip197/eip_flow_table');
 
-	let led = {
-		configured: false,
-		name: cu.get('system', 'green_status', 'name'),
-		trigger: cu.get('system', 'green_status', 'trigger'),
-		inverted: cu.get('system', 'green_status', 'inverted'),
-		default: cu.get('system', 'green_status', 'default'),
-		sysfs_trigger: read_text('/sys/class/leds/green:status/trigger'),
-		brightness: read_text('/sys/class/leds/green:status/brightness'),
-		max_brightness: read_text('/sys/class/leds/green:status/max_brightness')
-	};
-
-	led.configured = led.name != null;
-
 	return {
 		generated: time(),
 		model: read_text('/tmp/sysinfo/model'),
 		uptime: read_text('/proc/uptime'),
-		led: led,
 		firewall: {
 			flow_offloading: cu.get_first('firewall', 'defaults', 'flow_offloading'),
 			flow_offloading_hw: cu.get_first('firewall', 'defaults', 'flow_offloading_hw')

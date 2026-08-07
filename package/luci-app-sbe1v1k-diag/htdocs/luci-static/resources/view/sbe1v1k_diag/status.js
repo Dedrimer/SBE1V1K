@@ -93,15 +93,10 @@ return view.extend({
 			}).bind(this)
 		}, [ _('刷新') ]);
 
-		var led = d.led || {};
 		var fw = d.firewall || {};
 		var eip = d.eip || {};
 		var ppe = d.ppe || {};
 		var abi = d.abi || {};
-
-		var ledState = led.configured
-			? statusBadge(true, _('已配置') + ' · ' + esc(led.name) + ' · ' + esc(led.trigger) + (led.inverted === '1' ? ' · ' + _('反转') : ''))
-			: statusBadge(false, _('未配置'));
 
 		var offload = fw.flow_offloading_hw === '1'
 			? statusBadge(true, _('硬件卸载已启用'))
@@ -118,7 +113,6 @@ return view.extend({
 				section(_('设备'), kvRows([
 					[ _('型号'), esc(d.model || 'unknown') ],
 					[ _('运行时间'), esc((d.uptime || '').trim()) ],
-					[ _('状态 LED'), ledState ],
 					[ _('防火墙卸载'), offload ],
 					[ _('PPE 驱动'), ppeOk ? statusBadge(true, _('节点可读')) : statusBadge(false, _('无 PPE 节点')) ],
 					[ _('EIP 加密'), eipOk ? statusBadge(true, _('DT 节点存在')) : statusBadge(false, _('无 EIP 节点')) ]
@@ -129,20 +123,6 @@ return view.extend({
 					[ 'qcom_ppe_ds_vp_alloc', statusBadge(!!abi.qcom_ppe_ds_vp_alloc, abi.qcom_ppe_ds_vp_alloc ? 'present' : 'missing') ],
 					[ 'qcom_ppe_ds_queue_start', statusBadge(!!abi.qcom_ppe_ds_queue_start, abi.qcom_ppe_ds_queue_start ? 'present' : 'missing') ],
 					[ 'qcom_ppe_eip_provider', statusBadge(!!abi.qcom_ppe_eip_provider, abi.qcom_ppe_eip_provider ? 'present' : 'missing') ]
-				]))
-			]),
-
-			E('div', { 'class': 'cbi-map' }, [
-				E('h2', {}, [ _('状态 LED (green:status)') ]),
-				section(_('UCI 配置'), kvRows([
-					[ _('名称'), esc(led.name || '-') ],
-					[ _('触发器'), esc(led.trigger || '-') ],
-					[ _('默认亮'), led.default === '1' ? _('是') : _('否') ],
-					[ _('反转闪烁'), led.inverted === '1' ? _('是') : _('否') ]
-				])),
-				section(_('Sysfs 状态'), kvRows([
-					[ _('当前触发器'), preBlock(led.sysfs_trigger) ],
-					[ _('亮度'), esc((led.brightness || '').trim() + ' / ' + (led.max_brightness || '').trim()) ]
 				]))
 			]),
 
