@@ -1,0 +1,353 @@
+#!/bin/sh
+# /usr/sbin/sbe1v1k-netmode-apply
+#
+# Reads the requested network mode from /etc/config/sbe1v1k_netmode and
+# rewrites /etc/config/{network,wireless,dhcp} accordingly.
+#
+# Supported modes:
+#   router   - classic OpenWrt main-router setup (LAN bridge + DHCP + WAN)
+#   bypass   - LAN bridge with a static IP / gateway pointing at the main
+#              router, DHCP handed out by the upstream router
+#   repeater - one radio joins the upstream Wi-Fi (station) while the LAN is
+#              relayed onto the same subnet through relayd
+#
+# A safety snapshot is taken before applying and an automatic rollback
+# watchdog is armed; see sbe1v1k-netmode-restore.
+
+. /lib/functions.sh
+
+CONF=sbe1v1k_netmode
+BACKUP_DIR=/etc/sbe1v1k-netmode-backup
+STATE_DIR=/tmp/sbe1v1k-netmode
+PENDING=$STATE_DIR/pending
+WATCHDOG_PID=$STATE_DIR/watchdog.pid
+LOG=/tmp/sbe1v1k-netmode-apply.log
+LAN_PORTS="lan1 lan2 lan3"
+
+mkdir -p "$STATE_DIR"
+
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"; }
+die() {
+	log "ERROR: $*"
+	# No watchdog has been armed yet at this point; drop any pending
+	# marker written by the LuCI controller so the UI does not wait for
+	# a rollback that will never happen.
+	rm -f "$PENDING" "$WATCHDOG_PID"
+	echo "ERROR: $*" >&2
+	exit 1
+}
+
+uci_get() { uci -q get "$1" 2>/dev/null; }
+
+kill_old_watchdog() {
+	# The pending marker is written by the LuCI controller before this
+	# script runs; only cancel a previous watchdog process here.
+	if [ -f "$WATCHDOG_PID" ]; then
+		local pid
+		pid=$(cat "$WATCHDOG_PID" 2>/dev/null)
+		[ -n "$pid" ] && [ "$pid" != "$$" ] && kill "$pid" 2>/dev/null
+		rm -f "$WATCHDOG_PID"
+	fi
+}
+
+# ---------------- network section helpers ----------------
+
+device_has_name() {
+	local name
+	config_get name "$1" name
+	[ "$name" = "$2" ] && FOUND_DEV=1
+}
+
+ensure_brlan() {
+	FOUND_DEV=0
+	config_load network
+	config_foreach device_has_name device br-lan
+	if [ "$FOUND_DEV" != "1" ]; then
+		uci -q batch <<EOF
+			add network device
+			set network.@device[-1].name='br-lan'
+			set network.@device[-1].type='bridge'
+EOF
+		for p in $LAN_PORTS; do
+			uci -q add_list network.@device[-1].ports="$p"
+		done
+		log "created bridge device br-lan ($LAN_PORTS)"
+	fi
+}
+
+ensure_wan() {
+	if [ -z "$(uci_get network.wan)" ]; then
+		uci -q batch <<EOF
+			set network.wan=interface
+			set network.wan.device='wan'
+			set network.wan.proto='dhcp'
+EOF
+		log "created wan interface"
+	fi
+}
+
+set_lan_static() {
+	# $1 = ip, $2 = prefix, optional $3 = gateway, optional $4 = dns
+	local ip="$1" prefix="$2" gw="$3" dns="$4"
+	ensure_brlan
+	uci -q batch <<EOF
+		set network.lan=interface
+		set network.lan.device='br-lan'
+		set network.lan.proto='static'
+		delete network.lan.ipaddr
+		add_list network.lan.ipaddr='$ip/$prefix'
+		delete network.lan.netmask
+		delete network.lan.gateway
+		delete network.lan.dns
+		delete network.lan.ip6gw
+		set network.lan.ip6assign='60'
+EOF
+	if [ -n "$gw" ]; then
+		uci -q set network.lan.gateway="$gw"
+		[ -n "$dns" ] && uci -q add_list network.lan.dns="$dns"
+	fi
+}
+
+remove_leftovers() {
+	# drop wwan / relay interfaces used by repeater mode
+	uci -q delete network.wwan
+	uci -q delete network.relay
+}
+
+# ---------------- wireless helpers ----------------
+
+wifi_remove_sta() {
+	local sec="$1" mode
+	config_get mode "$sec" mode
+	[ "$mode" = "sta" ] && uci -q delete wireless.$sec
+}
+
+wifi_iface_set_ap() {
+	# $1 = section, $2 = enable|disable, $3 = radio to disable on
+	local sec="$1" action="$2" radio="$3" mode device
+	config_get mode "$sec" mode
+	[ "$mode" = "ap" ] || return 0
+	config_get device "$sec" device
+	case "$action" in
+		enable)
+			uci -q delete wireless.$sec.disabled
+			;;
+		disable)
+			if [ "$device" = "$radio" ]; then
+				uci -q set wireless.$sec.disabled='1'
+			else
+				uci -q delete wireless.$sec.disabled
+			fi
+			;;
+	esac
+}
+
+wifi_enable_all_aps() {
+	config_load wireless
+	config_foreach wifi_iface_set_ap wifi-iface enable ""
+}
+
+wifi_disable_aps_on_radio() {
+	config_load wireless
+	config_foreach wifi_iface_set_ap wifi-iface disable "$1"
+}
+
+wifi_radio_band() {
+	local sec="$1" want="$2" band
+	[ -n "$RADIO" ] && return 0
+	config_get band "$sec" band
+	[ "$band" = "$want" ] && RADIO="$sec"
+}
+
+wifi_find_radio() {
+	# $1 = band (2g/5g/6g); prints radio section name on stdout
+	local want="$1"
+	RADIO=""
+	config_load wireless
+	config_foreach wifi_radio_band wifi-device "$want"
+	[ -n "$RADIO" ] && echo "$RADIO"
+}
+
+setup_sta() {
+	# $1 = radio, $2 = ssid, $3 = encryption, $4 = key
+	local radio="$1" ssid="$2" enc="$3" key="$4" sec
+	sec=$(uci add wireless wifi-iface)
+	uci -q set wireless.$sec.device="$radio"
+	uci -q set wireless.$sec.mode='sta'
+	uci -q set wireless.$sec.network='wwan'
+	uci -q set wireless.$sec.ssid="$ssid"
+	uci -q set wireless.$sec.ifname='wwan0'
+	uci -q set wireless.$sec.disabled='0'
+	if [ "$enc" = "none" ] || [ -z "$enc" ]; then
+		uci -q set wireless.$sec.encryption='none'
+	else
+		uci -q set wireless.$sec.encryption="$enc"
+		uci -q set wireless.$sec.key="$key"
+	fi
+	log "created sta interface on $radio (ssid=$ssid enc=$enc)"
+}
+
+# ---------------- DHCP helpers ----------------
+
+ensure_lan_dhcp() {
+	if [ -z "$(uci_get dhcp.lan)" ]; then
+		uci -q batch <<EOF
+			set dhcp.lan=dhcp
+			set dhcp.lan.interface='lan'
+			set dhcp.lan.start='100'
+			set dhcp.lan.limit='150'
+			set dhcp.lan.leasetime='12h'
+			set dhcp.lan.dhcpv4='server'
+			set dhcp.lan.dhcpv6='server'
+			set dhcp.lan.ra='server'
+EOF
+	fi
+}
+
+lan_dhcp_enable() {
+	ensure_lan_dhcp
+	uci -q delete dhcp.lan.ignore
+	uci -q set dhcp.lan.dhcpv4='server'
+	uci -q set dhcp.lan.dhcpv6='server'
+	uci -q set dhcp.lan.ra='server'
+	log "LAN DHCP enabled"
+}
+
+lan_dhcp_disable() {
+	ensure_lan_dhcp
+	uci -q set dhcp.lan.ignore='1'
+	log "LAN DHCP disabled (upstream router handles addressing)"
+}
+
+# ---------------- mode implementations ----------------
+
+apply_router() {
+	ensure_wan
+	set_lan_static "$LAN_IP" "$LAN_PREFIX"
+	uci -q delete network.wan.disabled
+	remove_leftovers
+
+	config_load wireless
+	config_foreach wifi_remove_sta wifi-iface
+	wifi_enable_all_aps
+
+	lan_dhcp_enable
+}
+
+apply_bypass() {
+	ensure_wan
+	set_lan_static "$LAN_IP" "$LAN_PREFIX" "$GATEWAY" "${DNS:-$GATEWAY}"
+	uci -q set network.wan.disabled='1'
+	remove_leftovers
+
+	config_load wireless
+	config_foreach wifi_remove_sta wifi-iface
+	wifi_enable_all_aps
+
+	lan_dhcp_disable
+}
+
+apply_repeater() {
+	[ -n "$SSID" ] || die "repeater mode requires an upstream SSID"
+	[ "$ENC" = "none" ] && KEY=""
+
+	ensure_wan
+	set_lan_static "$LAN_IP" "$LAN_PREFIX"
+	uci -q set network.wan.disabled='1'
+
+	uci -q batch <<EOF
+		set network.wwan=interface
+		set network.wwan.proto='dhcp'
+		set network.wwan.device='wwan0'
+		set network.relay=interface
+		set network.relay.proto='relay'
+		set network.relay.network='lan wwan'
+		set network.relay.forward_dhcp='1'
+		set network.relay.forward_bcast='1'
+EOF
+
+	RADIO=$(wifi_find_radio "$BAND")
+	[ -n "$RADIO" ] || die "no wifi radio with band '$BAND' found"
+
+	config_load wireless
+	config_foreach wifi_remove_sta wifi-iface
+	wifi_disable_aps_on_radio "$RADIO"
+	setup_sta "$RADIO" "$SSID" "$ENC" "$KEY"
+
+	lan_dhcp_disable
+}
+
+restart_services() {
+	log "restarting network services..."
+	/etc/init.d/network restart >> "$LOG" 2>&1
+	/etc/init.d/dnsmasq restart >> "$LOG" 2>&1
+	/etc/init.d/odhcpd restart >> "$LOG" 2>&1
+	/etc/init.d/relayd restart >> "$LOG" 2>&1
+	/etc/init.d/firewall reload >> "$LOG" 2>&1
+	log "service restart finished"
+}
+
+# ---------------- main ----------------
+
+main() {
+	config_load "$CONF"
+
+	config_get MODE settings mode
+	case "$MODE" in
+		router|bypass|repeater) ;;
+		*) die "invalid mode '$MODE' in $CONF" ;;
+	esac
+
+	config_get LAN_IP settings lan_ip
+	config_get LAN_PREFIX settings lan_prefix
+	config_get GATEWAY settings gateway
+	config_get DNS settings dns
+	config_get SSID settings ssid
+	config_get KEY settings key
+	config_get ENC settings encryption
+	config_get BAND settings band
+	config_get TIMEOUT settings timeout
+
+	[ -n "$LAN_IP" ] || die "lan_ip not configured"
+	[ -n "$LAN_PREFIX" ] || LAN_PREFIX=24
+
+	# Remember whether the LuCI controller armed a rollback for this run.
+	# If it was already confirmed (marker removed) we must not re-arm it.
+	HAD_PENDING=0
+	[ -f "$PENDING" ] && HAD_PENDING=1
+
+	# Cancel any earlier pending rollback and take a fresh snapshot.
+	kill_old_watchdog
+	rm -rf "$BACKUP_DIR"
+	mkdir -p "$BACKUP_DIR"
+	for f in network wireless dhcp; do
+		[ -f "/etc/config/$f" ] && cp -a "/etc/config/$f" "$BACKUP_DIR/$f"
+	done
+	log "snapshot saved to $BACKUP_DIR"
+
+	case "$MODE" in
+		router)   apply_router ;;
+		bypass)   apply_bypass ;;
+		repeater) apply_repeater ;;
+	esac
+
+	uci -q commit network
+	uci -q commit wireless
+	uci -q commit dhcp
+
+	# Arm the rollback watchdog before touching the live network.
+	[ "$TIMEOUT" -gt 0 ] 2>/dev/null || TIMEOUT=180
+	if [ "$HAD_PENDING" = "1" ] || [ -f "$PENDING" ]; then
+		[ -f "$PENDING" ] || echo "mode=$MODE timeout=$TIMEOUT started=$(date +%s)" > "$PENDING"
+		( sleep "$TIMEOUT"; /usr/sbin/sbe1v1k-netmode-restore ) &
+		echo $! > "$WATCHDOG_PID"
+		log "watchdog armed (${TIMEOUT}s), applying mode=$MODE"
+	else
+		log "rollback watchdog skipped (no pending marker)"
+	fi
+
+	restart_services
+	log "mode=$MODE applied"
+}
+
+main "$@"

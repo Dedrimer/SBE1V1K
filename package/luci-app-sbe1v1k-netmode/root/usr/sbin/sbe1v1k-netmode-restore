@@ -1,0 +1,52 @@
+#!/bin/sh
+# /usr/sbin/sbe1v1k-netmode-restore
+#
+# Rolls /etc/config/{network,wireless,dhcp} back to the snapshot taken by
+# sbe1v1k-netmode-apply and restarts the affected services. Called either by
+# the automatic watchdog or manually from the LuCI page.
+
+. /lib/functions.sh
+
+BACKUP_DIR=/etc/sbe1v1k-netmode-backup
+STATE_DIR=/tmp/sbe1v1k-netmode
+PENDING=$STATE_DIR/pending
+WATCHDOG_PID=$STATE_DIR/watchdog.pid
+LOG=/tmp/sbe1v1k-netmode-apply.log
+
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"; }
+
+main() {
+	if [ ! -d "$BACKUP_DIR" ]; then
+		rm -f "$PENDING"
+		log "restore requested but no snapshot found; nothing to do"
+		exit 0
+	fi
+
+	# Stop the watchdog (but not ourself when invoked by it).
+	if [ -f "$WATCHDOG_PID" ]; then
+		local pid
+		pid=$(cat "$WATCHDOG_PID" 2>/dev/null)
+		[ -n "$pid" ] && [ "$pid" != "$$" ] && kill "$pid" 2>/dev/null
+		rm -f "$WATCHDOG_PID"
+	fi
+
+	log "restoring previous network configuration"
+	for f in network wireless dhcp; do
+		if [ -f "$BACKUP_DIR/$f" ]; then
+			cp -a "$BACKUP_DIR/$f" "/etc/config/$f"
+			log "restored /etc/config/$f"
+		fi
+	done
+
+	/etc/init.d/network restart >> "$LOG" 2>&1
+	/etc/init.d/dnsmasq restart >> "$LOG" 2>&1
+	/etc/init.d/odhcpd restart >> "$LOG" 2>&1
+	/etc/init.d/relayd restart >> "$LOG" 2>&1
+	/etc/init.d/firewall reload >> "$LOG" 2>&1
+
+	rm -f "$PENDING"
+	log "restore complete"
+	exit 0
+}
+
+main "$@"

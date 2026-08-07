@@ -1,0 +1,57 @@
+{
+	"admin/network/sbe1v1k_netmode": {
+		"title": "SBE1V1K 网络模式",
+		"order": 90,
+		"action": {
+			"type": "view",
+			"path": "sbe1v1k_netmode/status"
+		},
+		"depends": {
+			"acl": [ "luci-app-sbe1v1k-netmode" ]
+		}
+	},
+
+	"admin/network/sbe1v1k_netmode/status": {
+		"action": {
+			"type": "function",
+			"module": "luci.controller.sbe1v1k_netmode",
+			"function": "action_status"
+		}
+	},
+
+	"admin/network/sbe1v1k_netmode/apply": {
+		"action": {
+			"type": "function",
+			"module": "luci.controller.sbe1v1k_netmode",
+			"function": "action_apply",
+			"post": true
+		},
+		"depends": {
+			"acl": [ "luci-app-sbe1v1k-netmode" ]
+		}
+	},
+
+	"admin/network/sbe1v1k_netmode/confirm": {
+		"action": {
+			"type": "function",
+			"module": "luci.controller.sbe1v1k_netmode",
+			"function": "action_confirm",
+			"post": true
+		},
+		"depends": {
+			"acl": [ "luci-app-sbe1v1k-netmode" ]
+		}
+	},
+
+	"admin/network/sbe1v1k_netmode/revert": {
+		"action": {
+			"type": "function",
+			"module": "luci.controller.sbe1v1k_netmode",
+			"function": "action_revert",
+			"post": true
+		},
+		"depends": {
+			"acl": [ "luci-app-sbe1v1k-netmode" ]
+		}
+	}
+}
