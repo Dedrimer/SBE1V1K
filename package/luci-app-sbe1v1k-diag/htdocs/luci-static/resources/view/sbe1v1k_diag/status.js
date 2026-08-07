@@ -307,6 +307,8 @@ function irqTable(irqs)
 		}));
 }
 
+const SBE1V1K_CSS = '.sbe1v1k-table th, .sbe1v1k-table td { text-align: center; }';
+
 return view.extend({
 	load: function()
 	{
@@ -363,6 +365,7 @@ return view.extend({
 		var eipOk = eip.dt && eip.dt.status !== 'missing';
 
 		return E('div', {}, [
+			E('style', {}, [ SBE1V1K_CSS ]),
 			E('div', { 'class': 'cbi-map' }, [
 				E('h2', {}, [ _('概览') ]),
 				section(_('设备'), kvRows([
