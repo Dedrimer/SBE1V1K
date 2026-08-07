@@ -39,3 +39,4 @@ git-src
 .vscode*
 /.verify-patches-*/
 /openwrt-sbe1v1k/
+MERGE_WARNING.md

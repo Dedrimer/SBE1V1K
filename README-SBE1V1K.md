@@ -96,6 +96,7 @@ make -j"$(nproc)" world
 ```text
 out/targets/qualcommbe/ipq95xx/openwrt-qualcommbe-ipq95xx-askey_sbe1v1k-initramfs-uImage.itb
 out/targets/qualcommbe/ipq95xx/openwrt-qualcommbe-ipq95xx-askey_sbe1v1k-squashfs-sysupgrade.bin
+out/targets/qualcommbe/ipq95xx/openwrt-qualcommbe-ipq95xx-askey_sbe1v1k-squashfs-recovery.bin
 ```
 
 本次固件编译耗时保存在 `out/build-time.txt`。

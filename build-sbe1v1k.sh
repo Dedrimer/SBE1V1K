@@ -336,9 +336,11 @@ BUILD_FINISHED_AT="$(date +%s)"
 
 sysupgrade_image="$(find "$output_dir" -maxdepth 1 -type f -name '*askey_sbe1v1k*squashfs-sysupgrade.bin' -print -quit 2>/dev/null || true)"
 initramfs_image="$(find "$output_dir" -maxdepth 1 -type f -name '*askey_sbe1v1k*initramfs-uImage.itb' -print -quit 2>/dev/null || true)"
+recovery_image="$(find "$output_dir" -maxdepth 1 -type f -name '*askey_sbe1v1k*squashfs-recovery.bin' -print -quit 2>/dev/null || true)"
 
 [[ -n "$sysupgrade_image" ]] || die "build finished without the expected SBE1V1K sysupgrade image"
 [[ -n "$initramfs_image" ]] || die "build finished without the expected SBE1V1K initramfs image"
+[[ -n "$recovery_image" ]] || die "build finished without the expected SBE1V1K recovery image"
 
 log "Build completed successfully"
 build_elapsed=$((BUILD_FINISHED_AT - BUILD_STARTED_AT))
@@ -346,4 +348,5 @@ build_duration="$(format_duration "$build_elapsed")"
 printf 'Compilation time: %s (%d seconds)\n' "$build_duration" "$build_elapsed" | tee "$OUTPUT_ROOT/build-time.txt"
 printf 'Initramfs: %s\n' "$initramfs_image"
 printf 'Sysupgrade: %s\n' "$sysupgrade_image"
-sha256sum "$initramfs_image" "$sysupgrade_image"
+printf 'Recovery: %s\n' "$recovery_image"
+sha256sum "$initramfs_image" "$sysupgrade_image" "$recovery_image"

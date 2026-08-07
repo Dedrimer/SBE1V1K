@@ -75,6 +75,13 @@ jobs:
             make CONFIG_BINARY_FOLDER="$GITHUB_WORKSPACE/out" -j1 V=s tools/lz4/compile
           } 2>&1 | tee .build-logs/lz4-focused-retry.log
 
+      - name: List built images
+        if: success()
+        run: |
+          set -euxo pipefail
+          find "$GITHUB_WORKSPACE/out/targets/qualcommbe/ipq95xx" -maxdepth 1 \
+            -type f -name '*askey_sbe1v1k*' -print -exec sha256sum {} \;
+
       - name: Upload build logs and firmware
         if: always()
         uses: actions/upload-artifact@v4
@@ -86,3 +93,4 @@ jobs:
           path: |
             .build-logs/
             out/
+            out/targets/qualcommbe/ipq95xx/*askey_sbe1v1k*recovery.bin
