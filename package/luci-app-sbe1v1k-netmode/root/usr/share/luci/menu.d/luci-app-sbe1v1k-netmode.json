@@ -31,6 +31,30 @@
 		}
 	},
 
+	"admin/network/sbe1v1k_netmode/dhcp_probe": {
+		"action": {
+			"type": "function",
+			"module": "luci.controller.sbe1v1k_netmode",
+			"function": "action_dhcp_probe",
+			"post": true
+		},
+		"depends": {
+			"acl": [ "luci-app-sbe1v1k-netmode" ]
+		}
+	},
+
+	"admin/network/sbe1v1k_netmode/wifi_scan": {
+		"action": {
+			"type": "function",
+			"module": "luci.controller.sbe1v1k_netmode",
+			"function": "action_wifi_scan",
+			"post": true
+		},
+		"depends": {
+			"acl": [ "luci-app-sbe1v1k-netmode" ]
+		}
+	},
+
 	"admin/network/sbe1v1k_netmode/confirm": {
 		"action": {
 			"type": "function",

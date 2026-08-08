@@ -1,0 +1,71 @@
+#!/bin/sh
+# Probe an upstream DHCP server without changing the live LAN configuration.
+
+STATE_DIR=/tmp/sbe1v1k-netmode
+RESULT=$STATE_DIR/dhcp-probe.result
+LOCK_DIR=$STATE_DIR/dhcp-probe.lock
+PIDFILE=$STATE_DIR/dhcp-probe.pid
+
+write_offer() {
+	local tmp
+
+	[ "${SBE1V1K_DHCP_RESULT:-}" = "$RESULT" ] || exit 1
+	[ -n "${ip:-}" ] || exit 1
+	tmp=$RESULT.$$
+	{
+		printf 'ip=%s\n' "$ip"
+		printf 'subnet=%s\n' "${subnet:-}"
+		printf 'router=%s\n' "${router%% *}"
+		printf 'dns=%s\n' "${dns%% *}"
+		printf 'serverid=%s\n' "${serverid:-}"
+		printf 'lease=%s\n' "${lease:-}"
+	} > "$tmp" && mv -f "$tmp" "$RESULT"
+}
+
+case "${1:-}" in
+	bound|renew)
+		write_offer
+		exit $?
+		;;
+	deconfig)
+		exit 0
+		;;
+	*)
+		[ "$#" -eq 0 ] || exit 0
+		;;
+esac
+
+umask 077
+mkdir -p "$STATE_DIR" || exit 1
+
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+	printf 'error=busy\n'
+	exit 1
+fi
+
+cleanup() {
+	rm -f "$RESULT" "$PIDFILE"
+	rmdir "$LOCK_DIR" 2>/dev/null
+}
+
+trap cleanup 0
+trap 'exit 1' HUP INT TERM
+rm -f "$RESULT" "$PIDFILE"
+export SBE1V1K_DHCP_RESULT=$RESULT
+
+if [ ! -x /sbin/udhcpc ]; then
+	printf 'error=unavailable\n'
+	exit 1
+fi
+
+if ! /sbin/udhcpc -f -n -q -R -t 3 -T 3 -i br-lan -s "$0" -p "$PIDFILE" >/dev/null 2>&1; then
+	printf 'error=no_offer\n'
+	exit 1
+fi
+
+if [ ! -s "$RESULT" ]; then
+	printf 'error=invalid_offer\n'
+	exit 1
+fi
+
+cat "$RESULT"

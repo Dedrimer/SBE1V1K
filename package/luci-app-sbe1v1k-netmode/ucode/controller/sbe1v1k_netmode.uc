@@ -12,6 +12,7 @@ const SUBMIT_LOCK = STATE_DIR + '/submit.lock';
 const BACKUP_DIR = '/etc/sbe1v1k-netmode-backup';
 const APPLY_SCRIPT = '/usr/sbin/sbe1v1k-netmode-apply';
 const RESTORE_SCRIPT = '/usr/sbin/sbe1v1k-netmode-restore';
+const DHCP_PROBE_SCRIPT = '/usr/libexec/sbe1v1k-dhcp-probe';
 const DEFAULT_TIMEOUT = 180;
 const MAX_TIMEOUT = 600;
 const UPLINK = 'sbe1v1k_wwan';
@@ -24,14 +25,22 @@ const ENCS = [ 'none', 'owe', 'psk2', 'sae', 'sae-mixed' ];
 function run(cmd)
 {
 	let fd = popen(cmd);
+	let data = '';
 
 	if (!fd)
 		return null;
 
-	let data = fd.read(65536);
+	while (length(data) < 262144) {
+		let chunk = fd.read(min(65536, 262144 - length(data)));
+
+		if (chunk == null || chunk == '')
+			break;
+
+		data += chunk;
+	}
 
 	fd.close();
-	return data ?? '';
+	return data;
 }
 
 function read_text(path)
@@ -181,6 +190,164 @@ function valid_key(enc, key)
 function valid_request_id(id)
 {
 	return type(id) == 'string' && match(id, /^[0-9a-fA-F-]+$/) != null;
+}
+
+function valid_bssid(id)
+{
+	return type(id) == 'string' && match(id, /^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/) != null;
+}
+
+function valid_ssid(ssid)
+{
+	return type(ssid) == 'string' && length(ssid) >= 1 && length(ssid) <= 32 &&
+		match(ssid, /[[:cntrl:]]/) == null;
+}
+
+function valid_ifname(name)
+{
+	return type(name) == 'string' && length(name) >= 1 && length(name) <= 15 &&
+		match(name, /^[A-Za-z0-9_.-]+$/) != null;
+}
+
+function mask_octet_bits(n)
+{
+	switch (n) {
+	case 255: return 8;
+	case 254: return 7;
+	case 252: return 6;
+	case 248: return 5;
+	case 240: return 4;
+	case 224: return 3;
+	case 192: return 2;
+	case 128: return 1;
+	case 0: return 0;
+	default: return null;
+	}
+}
+
+function netmask_prefix(mask)
+{
+	let parts = ipv4_parts(mask);
+	let prefix = 0;
+	let ended = false;
+
+	if (parts == null)
+		return null;
+
+	for (let octet in parts) {
+		let bits = mask_octet_bits(octet);
+
+		if (bits == null || (ended && bits != 0))
+			return null;
+
+		prefix += bits;
+		if (bits < 8)
+			ended = true;
+	}
+
+	return prefix;
+}
+
+function radio_for_band(cu, band)
+{
+	let found = null;
+
+	cu.load('wireless');
+	cu.foreach('wireless', 'wifi-device', function(s) {
+		let name = s['.name'];
+
+		if (found == null && cu.get('wireless', name, 'band') == band)
+			found = name;
+	});
+
+	return found;
+}
+
+function radio_scan_ifname(ubus, radio)
+{
+	if (ubus == null || radio == null)
+		return null;
+
+	let status = ubus.call('network.wireless', 'status', {});
+	let data = type(status) == 'object' ? status[radio] : null;
+
+	if (type(data) != 'object' || type(data.interfaces) != 'array')
+		return null;
+
+	for (let iface in data.interfaces)
+		if (type(iface.ifname) == 'string' && iface.ifname != '')
+			return iface.ifname;
+
+	return null;
+}
+
+function scan_encryption(cell)
+{
+	let methods = cell?.crypto?.key_mgmt ?? [];
+	let has_psk = false;
+	let has_sae = false;
+	let has_owe = false;
+	let unsupported = false;
+
+	if (type(methods) != 'array' || length(methods) == 0)
+		return 'none';
+
+	for (let method in methods) {
+		if (match(method, /OWE/) != null)
+			has_owe = true;
+		else if (match(method, /SAE/) != null)
+			has_sae = true;
+		else if (match(method, /PSK/) != null)
+			has_psk = true;
+		else
+			unsupported = true;
+	}
+
+	if (unsupported)
+		return null;
+	if (has_owe)
+		return 'owe';
+	if (has_sae && has_psk)
+		return 'sae-mixed';
+	if (has_sae)
+		return 'sae';
+	if (has_psk)
+		return 'psk2';
+
+	return null;
+}
+
+function scan_networks(cells, band)
+{
+	let out = [];
+	let iw_band = band == '2g' ? '2.4' : substr(band, 0, 1);
+
+	if (type(cells) != 'array')
+		return out;
+
+	for (let cell in cells) {
+		let encryption = scan_encryption(cell);
+		let supported = encryption != null &&
+			(band != '6g' || encryption == 'sae' || encryption == 'owe');
+
+		if (cell.band != iw_band || cell.mode != 'Master' || !valid_ssid(cell.ssid) ||
+		    !valid_bssid(cell.bssid))
+			continue;
+
+		push(out, {
+			ssid: cell.ssid,
+			bssid: uc(cell.bssid),
+			encryption,
+			supported,
+			channel: int(cell.channel ?? 0),
+			signal: int(cell.dbm ?? -100)
+		});
+
+		if (length(out) >= 128)
+			break;
+	}
+
+	return out;
 }
 
 function detect_mode(cu)
@@ -337,6 +504,7 @@ function collect(cu, ubus)
 		gateway: cu.get(CFG, 'settings', 'gateway'),
 		dns: cu.get(CFG, 'settings', 'dns'),
 		ssid: cu.get(CFG, 'settings', 'ssid'),
+		bssid: cu.get(CFG, 'settings', 'bssid'),
 		key_set: type(saved_key) == 'string' && saved_key != '',
 		encryption: cu.get(CFG, 'settings', 'encryption'),
 		band: cu.get(CFG, 'settings', 'band'),
@@ -365,7 +533,8 @@ function collect(cu, ubus)
 	let wwan = {
 		exists: cu.get('network', uplink_name) != null,
 		proto: cu.get('network', uplink_name, 'proto'),
-		ssid: null
+		ssid: null,
+		bssid: null
 	};
 	let relay = {
 		exists: cu.get('network', relay_name) != null,
@@ -382,8 +551,10 @@ function collect(cu, ubus)
 	cu.foreach('wireless', 'wifi-iface', function(s) {
 		let name = s['.name'];
 
-		if (name == 'sbe1v1k_sta' || (wwan.ssid == null && cu.get('wireless', name, 'mode') == 'sta'))
+		if (name == 'sbe1v1k_sta' || (wwan.ssid == null && cu.get('wireless', name, 'mode') == 'sta')) {
 			wwan.ssid = cu.get('wireless', name, 'ssid');
+			wwan.bssid = cu.get('wireless', name, 'bssid');
+		}
 	});
 
 	return {
@@ -418,6 +589,99 @@ return {
 		http.write_json(collect(cu, ubus));
 	},
 
+	action_dhcp_probe: function()
+	{
+		http.prepare_content('application/json');
+
+		if (collect_pending().active) {
+			json_error('网络切换进行中，暂时不能探测 DHCP');
+			return;
+		}
+
+		let offer = parse_state(run(DHCP_PROBE_SCRIPT) ?? '');
+
+		if (offer.error != null) {
+			let message = offer.error == 'busy'
+				? '另一个 DHCP 探测正在进行'
+				: (offer.error == 'unavailable'
+					? '系统缺少 DHCP 客户端，无法执行探测'
+					: '未收到上游 DHCP 响应，请确认上游网线已接入 LAN 口');
+			json_error(message);
+			return;
+		}
+
+		let prefix = netmask_prefix(offer.subnet);
+		let prefix_text = prefix == null ? '' : '' + prefix;
+		let gateway = offer.router;
+		let dns = offer.dns ?? '';
+
+		if (!valid_prefix(prefix_text) || !valid_host_ip(offer.ip, prefix_text) ||
+		    !valid_host_ip(gateway, prefix_text) ||
+		    !same_subnet(offer.ip, gateway, prefix_text) || offer.ip == gateway ||
+		    (dns != '' && !valid_unicast_ip(dns))) {
+			json_error('上游 DHCP 返回了无效或不兼容的 IPv4 配置');
+			return;
+		}
+
+		let interfaces = interface_dump(connect());
+		let local = iface_runtime(interfaces, 'lan');
+
+		for (let address in local.addrs) {
+			let slash = index(address, '/');
+			let ip = slash > 0 ? substr(address, 0, slash) : address;
+
+			if (offer.serverid == ip || gateway == ip) {
+				json_error('探测到了本机 DHCP 服务而不是上游路由器，请检查接线');
+				return;
+			}
+		}
+
+		http.write_json({
+			ok: true,
+			lan_ip: offer.ip,
+			lan_prefix: prefix_text,
+			gateway,
+			dns: dns != '' ? dns : gateway,
+			server: offer.serverid ?? '',
+			lease: int(offer.lease ?? 0)
+		});
+	},
+
+	action_wifi_scan: function()
+	{
+		http.prepare_content('application/json');
+
+		if (collect_pending().active) {
+			json_error('网络切换进行中，暂时不能扫描 Wi-Fi');
+			return;
+		}
+
+		let band = http.formvalue('band');
+		if (!array_contains(BANDS, band)) {
+			json_error('无线频段无效');
+			return;
+		}
+
+		let cu = cursor();
+		let ubus = connect();
+		let radio = radio_for_band(cu, band);
+		let ifname = radio_scan_ifname(ubus, radio);
+
+		if (!valid_ifname(ifname)) {
+			json_error('所选频段没有正在运行的无线接口，请先启用该频段');
+			return;
+		}
+
+		let raw = run('/usr/bin/iwinfo -j ' + ifname + ' scan 2>/dev/null');
+		let cells = raw == null || trim(raw) == '' ? null : json(raw);
+		if (type(cells) != 'array') {
+			json_error('无线扫描失败，请稍后重试');
+			return;
+		}
+
+		http.write_json({ ok: true, band, radio, results: scan_networks(cells, band) });
+	},
+
 	action_apply: function()
 	{
 		http.prepare_content('application/json');
@@ -433,6 +697,7 @@ return {
 		let gateway = http.formvalue('gateway');
 		let dns = http.formvalue('dns');
 		let ssid = http.formvalue('ssid');
+		let bssid = http.formvalue('bssid');
 		let key = http.formvalue('key');
 		let encryption = http.formvalue('encryption');
 		let band = http.formvalue('band');
@@ -466,8 +731,8 @@ return {
 		}
 
 		if (mode == 'repeater') {
-			if (type(ssid) != 'string' || length(ssid) < 1 || length(ssid) > 32) {
-				json_error('上游 Wi-Fi SSID 必须为 1–32 字节');
+			if (!valid_ssid(ssid)) {
+				json_error('上游 Wi-Fi SSID 必须为 1–32 字节且不能包含控制字符');
 				return;
 			}
 
@@ -476,12 +741,18 @@ return {
 				return;
 			}
 
+			if (bssid != null && bssid != '' && !valid_bssid(bssid)) {
+				json_error('所选 Wi-Fi BSSID 格式无效');
+				return;
+			}
+
 			if (band == '6g' && encryption != 'sae' && encryption != 'owe') {
 				json_error('6 GHz 上行仅支持 WPA3-SAE 或 OWE');
 				return;
 			}
 
-			if ((key == null || key == '') && encryption != 'none' && encryption != 'owe')
+			if ((key == null || key == '') && encryption != 'none' && encryption != 'owe' &&
+			    ssid == cu.get(CFG, 'settings', 'ssid'))
 				key = cu.get(CFG, 'settings', 'key');
 
 			if (!valid_key(encryption, key)) {
@@ -517,6 +788,7 @@ return {
 
 		if (mode == 'repeater') {
 			cu.set(CFG, 'settings', 'ssid', ssid);
+			cu.set(CFG, 'settings', 'bssid', bssid ?? '');
 			cu.set(CFG, 'settings', 'key', key ?? '');
 			cu.set(CFG, 'settings', 'encryption', encryption);
 			cu.set(CFG, 'settings', 'band', band);

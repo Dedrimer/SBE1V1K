@@ -164,6 +164,10 @@ valid_key() {
 	esac
 }
 
+valid_bssid() {
+	printf '%s\n' "$1" | grep -Eq '^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$'
+}
+
 device_has_name() {
 	local name
 	config_get name "$1" name
@@ -288,6 +292,8 @@ setup_sta() {
 	uci -q set wireless.sbe1v1k_sta.mode=sta || return 1
 	uci -q set "wireless.sbe1v1k_sta.network=$UPLINK" || return 1
 	uci -q set "wireless.sbe1v1k_sta.ssid=$SSID" || return 1
+	uci -q delete wireless.sbe1v1k_sta.bssid
+	[ -z "$BSSID" ] || uci -q set "wireless.sbe1v1k_sta.bssid=$BSSID" || return 1
 	uci -q set wireless.sbe1v1k_sta.disabled=0 || return 1
 	uci -q set "wireless.sbe1v1k_sta.encryption=$ENC" || return 1
 	uci -q delete wireless.sbe1v1k_sta.ifname
@@ -376,6 +382,7 @@ validate_request() {
 			;;
 		repeater)
 			[ -n "$SSID" ] && [ "${#SSID}" -le 32 ] || return 1
+			[ -z "$BSSID" ] || valid_bssid "$BSSID" || return 1
 			case "$BAND" in 2g|5g|6g) ;; *) return 1;; esac
 			valid_key || return 1
 			if [ "$BAND" = 6g ]; then
@@ -422,6 +429,7 @@ main() {
 	config_get GATEWAY settings gateway
 	config_get DNS settings dns
 	config_get SSID settings ssid
+	config_get BSSID settings bssid
 	config_get KEY settings key
 	config_get ENC settings encryption
 	config_get BAND settings band

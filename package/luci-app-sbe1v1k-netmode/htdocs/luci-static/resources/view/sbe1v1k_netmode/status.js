@@ -18,8 +18,8 @@ const MODE_LABELS = {
 
 const MODE_DESCS = {
 	router:   _('标准 OpenWrt 主路由：LAN 桥接 + DHCP，WAN 接上级光猫/交换机'),
-	bypass:   _('关闭 DHCP，使用主路由网段静态 IP，网关指向主路由'),
-	repeater: _('通过 Wi-Fi 连接上游路由器，有线 + 无线客户端共享上游网络')
+	bypass:   _('关闭 DHCP，可从上游 DHCP 自动读取地址后转为固定配置'),
+	repeater: _('扫描并选择上游 Wi-Fi，有线 + 无线客户端共享上游网络')
 };
 
 const BAND_LABELS = {
@@ -142,6 +142,7 @@ function buildStatus(d)
 	if (wwan && wwan.exists) {
 		rows.push([ _('上行 Wi-Fi'), E('span', {}, [
 			 plain(wwan.ssid || '-'),
+			 wwan.bssid ? ' · ' + plain(wwan.bssid) : '',
 			' · ' + ((wwan.runtime && wwan.runtime.up) ? _('已连接') : _('未连接'))
 		]) ]);
 	}
@@ -246,26 +247,57 @@ function buildModeCards(selected)
 	}));
 }
 
-function textRow(id, label, value, placeholder, type)
+function textRow(id, label, value, placeholder, type, onInput)
 {
+	var attrs = { 'id': id, 'type': type || 'text', 'value': value ?? '', 'placeholder': placeholder || '' };
+
+	if (typeof onInput === 'function')
+		attrs.input = onInput;
+
 	return E('div', { 'class': 'cbi-value' }, [
 		E('label', { 'class': 'cbi-value-title', 'for': id }, [ label ]),
 		E('div', { 'class': 'cbi-value-field' }, [
-			E('input', { 'id': id, 'type': type || 'text', 'value': value ?? '', 'placeholder': placeholder || '' })
+			E('input', attrs)
 		])
 	]);
 }
 
-function selectRow(id, label, options, value)
+function selectRow(id, label, options, value, onChange)
 {
+	var attrs = { 'id': id };
+
+	if (typeof onChange === 'function')
+		attrs.change = onChange;
+
 	return E('div', { 'class': 'cbi-value' }, [
 		E('label', { 'class': 'cbi-value-title', 'for': id }, [ label ]),
 		E('div', { 'class': 'cbi-value-field' }, [
-			E('select', { 'id': id }, options.map(function(o) {
+			E('select', attrs, options.map(function(o) {
 				return E('option', { 'value': o[0], 'selected': (o[0] === value) || null }, [ o[1] ]);
 			}))
 		])
 	]);
+}
+
+function prefixOptions()
+{
+	var out = [];
+
+	for (var p = 8; p <= 30; p++)
+		out.push([ String(p), '/' + p ]);
+
+	return out;
+}
+
+function clearWifiSelection()
+{
+	var bssid = document.getElementById('sbe1v1k-bssid');
+	var results = document.getElementById('sbe1v1k-wifi-results');
+
+	if (bssid)
+		bssid.value = '';
+	if (results)
+		results.value = '';
 }
 
 function buildForm(mode, d)
@@ -284,19 +316,28 @@ function buildForm(mode, d)
 
 	var common = [
 		textRow('sbe1v1k-lan-ip', _('LAN IP 地址'), s.lan_ip || curLan, '192.168.1.1'),
-		selectRow('sbe1v1k-lan-prefix', _('子网前缀'), [ '24', '23', '22', '25', '26' ].map(function(p) {
-			return [ p, '/' + p ];
-		}), s.lan_prefix || '24')
+		selectRow('sbe1v1k-lan-prefix', _('子网前缀'), prefixOptions(), s.lan_prefix || '24')
 	];
 
 	var extra;
 
 	if (mode === 'bypass') {
 		extra = [
+			E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, [ _('上游 DHCP') ]),
+				E('div', { 'class': 'cbi-value-field sbe1v1k-inline-actions' }, [
+					E('button', {
+						'id': 'sbe1v1k-dhcp-probe-btn',
+						'class': 'cbi-button cbi-button-action',
+						'click': function(ev) { ev.preventDefault(); probeDhcp(); }
+					}, [ _('自动获取配置') ]),
+					E('span', { 'id': 'sbe1v1k-dhcp-probe-status', 'class': 'sbe1v1k-action-status' }, [])
+				])
+			]),
 			textRow('sbe1v1k-gateway', _('主路由网关 IP'), s.gateway || '', '例如 192.168.1.1'),
 			textRow('sbe1v1k-dns', _('DNS（可选）'), s.dns || '', '留空则使用网关'),
 			E('div', { 'class': 'cbi-value' }, [
-				E('div', { 'class': 'cbi-value-field', 'style': 'color:#666' }, [ _('提示：本机将使用主路由网段的固定 IP，请确保该 IP 未被占用。') ])
+				E('div', { 'class': 'cbi-value-field', 'style': 'color:#666' }, [ _('自动获取前请将上游网线接入任一 LAN 口；探测只读取 DHCP 租约而不修改当前网络，应用前仍建议在主路由中为该地址建立静态租约。') ])
 			])
 		];
 	}
@@ -304,14 +345,29 @@ function buildForm(mode, d)
 		extra = [
 			selectRow('sbe1v1k-band', _('上行频段'), bands.map(function(b) {
 				return [ b, BAND_LABELS[b] ];
-			}), s.band || '5g'),
-			textRow('sbe1v1k-ssid', _('上游 Wi-Fi 名称 (SSID)'), s.ssid || '', ''),
+			}), s.band || '5g', clearWifiSelection),
+			E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, [ _('可用 Wi-Fi') ]),
+				E('div', { 'class': 'cbi-value-field sbe1v1k-inline-actions' }, [
+					E('button', {
+						'id': 'sbe1v1k-wifi-scan-btn',
+						'class': 'cbi-button cbi-button-action',
+						'click': function(ev) { ev.preventDefault(); scanWifi(); }
+					}, [ _('扫描所选频段') ]),
+					E('span', { 'id': 'sbe1v1k-wifi-scan-status', 'class': 'sbe1v1k-action-status' }, [])
+				])
+			]),
+			selectRow('sbe1v1k-wifi-results', _('扫描结果'), [ [ '', _('请先扫描并选择上游 Wi-Fi') ] ], '', function(ev) {
+				chooseWifiResult(ev.target);
+			}),
+			E('input', { 'id': 'sbe1v1k-bssid', 'type': 'hidden', 'value': s.bssid || '' }),
+			textRow('sbe1v1k-ssid', _('上游 Wi-Fi 名称 (SSID)'), s.ssid || '', _('也可手动填写隐藏网络'), 'text', clearWifiSelection),
 			selectRow('sbe1v1k-enc', _('加密方式'), [ 'psk2', 'sae-mixed', 'sae', 'owe', 'none' ].map(function(e) {
 				return [ e, ENC_LABELS[e] ];
 			}), s.encryption || 'psk2'),
 			textRow('sbe1v1k-key', _('Wi-Fi 密码'), '', s.key_set ? _('留空保持已保存密码') : '', 'password'),
 			E('div', { 'class': 'cbi-value' }, [
-				E('div', { 'class': 'cbi-value-field', 'style': 'color:#666' }, [ _('提示：LAN IP 必须与主路由同网段且未被占用，例如主路由为 192.168.1.1 时填 192.168.1.2。') ])
+				E('div', { 'class': 'cbi-value-field', 'style': 'color:#666' }, [ _('扫描会自动填写 SSID、BSSID 和加密方式；企业认证与 WEP 网络不支持。LAN IP 仍须与上游同网段且未被占用。') ])
 			])
 		];
 	}
@@ -324,6 +380,125 @@ function buildForm(mode, d)
 	return E('div', { 'id': 'sbe1v1k-form' }, [
 		section(_('模式参数'), common.concat(extra))
 	]);
+}
+
+function setFieldValue(id, value)
+{
+	var field = document.getElementById(id);
+
+	if (field)
+		field.value = value ?? '';
+}
+
+function probeDhcp()
+{
+	var btn = document.getElementById('sbe1v1k-dhcp-probe-btn');
+	var status = document.getElementById('sbe1v1k-dhcp-probe-status');
+
+	if (!btn)
+		return;
+
+	btn.disabled = true;
+	if (status)
+		status.textContent = _('正在等待上游 DHCP…');
+
+	api('/dhcp_probe').then(function(r) {
+		if (!r.ok)
+			throw new Error(r.error || _('DHCP 探测失败'));
+
+		setFieldValue('sbe1v1k-lan-ip', r.lan_ip);
+		setFieldValue('sbe1v1k-lan-prefix', r.lan_prefix);
+		setFieldValue('sbe1v1k-gateway', r.gateway);
+		setFieldValue('sbe1v1k-dns', r.dns);
+		if (status)
+			status.textContent = _('已获取租约');
+		showMessage(_('已从上游 DHCP 自动填写地址、前缀、网关和 DNS。'), false);
+	}).catch(function(err) {
+		if (status)
+			status.textContent = _('获取失败');
+		showMessage(_('DHCP 探测失败: ') + plain(err.message), true);
+	}).finally(function() {
+		btn.disabled = false;
+	});
+}
+
+function wifiResultLabel(network)
+{
+	var enc = network.encryption ? (ENC_LABELS[network.encryption] || network.encryption) : _('不支持的加密');
+	return plain(network.ssid) + ' · ' + plain(network.signal) + ' dBm · ' + enc +
+		' · CH ' + plain(network.channel) + ' · ' + plain(network.bssid);
+}
+
+function chooseWifiResult(select)
+{
+	var index = parseInt(select.value, 10);
+	var network = select._sbe1v1kNetworks && select._sbe1v1kNetworks[index];
+
+	if (!network || !network.supported)
+		return;
+
+	setFieldValue('sbe1v1k-ssid', network.ssid);
+	setFieldValue('sbe1v1k-bssid', network.bssid);
+	setFieldValue('sbe1v1k-enc', network.encryption);
+
+	var key = document.getElementById('sbe1v1k-key');
+	var saved = lastData && lastData.stored;
+	if (key) {
+		key.value = '';
+		key.placeholder = saved && saved.key_set && saved.ssid === network.ssid
+			? _('留空保持已保存密码')
+			: ((network.encryption === 'none' || network.encryption === 'owe') ? '' : _('请输入此 Wi-Fi 的密码'));
+	}
+}
+
+function scanWifi()
+{
+	var btn = document.getElementById('sbe1v1k-wifi-scan-btn');
+	var status = document.getElementById('sbe1v1k-wifi-scan-status');
+	var select = document.getElementById('sbe1v1k-wifi-results');
+	var band = document.getElementById('sbe1v1k-band');
+
+	if (!btn || !select || !band)
+		return;
+
+	btn.disabled = true;
+	select.disabled = true;
+	if (status)
+		status.textContent = _('正在扫描…');
+
+	api('/wifi_scan', { band: band.value }).then(function(r) {
+		if (!r.ok)
+			throw new Error(r.error || _('无线扫描失败'));
+
+		var networks = Array.isArray(r.results) ? r.results : [];
+		networks.sort(function(a, b) {
+			return (Number(b.signal) || -100) - (Number(a.signal) || -100) || plain(a.ssid).localeCompare(plain(b.ssid));
+		});
+
+		select.innerHTML = '';
+		select._sbe1v1kNetworks = networks;
+		select.appendChild(E('option', { 'value': '' }, [
+			networks.length ? _('请选择上游 Wi-Fi') : _('未发现可见 Wi-Fi')
+		]));
+
+		networks.forEach(function(network, index) {
+			select.appendChild(E('option', {
+				'value': String(index),
+				'disabled': network.supported ? null : true
+			}, [ wifiResultLabel(network) ]));
+		});
+
+		select.disabled = false;
+		if (status)
+			status.textContent = _('发现网络：') + networks.length;
+	}).catch(function(err) {
+		if (status)
+			status.textContent = _('扫描失败');
+		showMessage(_('Wi-Fi 扫描失败: ') + plain(err.message), true);
+		select.disabled = false;
+	}).finally(function() {
+		btn.disabled = false;
+	});
 }
 
 /* ---------------- apply / confirm / revert ---------------- */
@@ -345,6 +520,7 @@ function collectParams(mode)
 	else if (mode === 'repeater') {
 		p.band = val('sbe1v1k-band');
 		p.ssid = val('sbe1v1k-ssid');
+		p.bssid = val('sbe1v1k-bssid');
 		p.encryption = val('sbe1v1k-enc');
 		p.key = val('sbe1v1k-key');
 	}
@@ -469,6 +645,8 @@ const SBE1V1K_CSS = [
 	'.sbe1v1k-card-active { border-color: #188038; background: #e8f5e9; box-shadow: 0 0 0 1px #188038; }',
 	'.sbe1v1k-card-title { font-size: 16px; font-weight: bold; margin-bottom: 6px; text-align: center; }',
 	'.sbe1v1k-card-desc { font-size: 12px; color: #666; text-align: center; }',
+	'.sbe1v1k-inline-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }',
+	'.sbe1v1k-action-status { color: #666; }',
 	'#sbe1v1k-form input[type="text"], #sbe1v1k-form input[type="password"], #sbe1v1k-form select { width: 100%; box-sizing: border-box; }'
 ].join('\n');
 

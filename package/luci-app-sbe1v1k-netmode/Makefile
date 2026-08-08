@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 LUCI_TITLE:=SBE1V1K Network Mode Switch
 LUCI_DESCRIPTION:=Quickly switch Askey SBE1V1K between main router, bypass router and repeater modes
-LUCI_DEPENDS:=+luci-base +relayd
+LUCI_DEPENDS:=+luci-base +relayd +wifi-scripts +iwinfo
 LUCI_PKGARCH:=all
 
 PKG_LICENSE:=Apache-2.0

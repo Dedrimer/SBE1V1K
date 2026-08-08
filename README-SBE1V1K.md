@@ -128,7 +128,7 @@ VLAN、SQM 或 LED 等配置失效，本版已提升设备兼容版本；升级�
   - `wifi-rate-diag`:Wi-Fi 7 速率与 PPE 直通诊断
   - 防火墙硬件卸载由 `/etc/init.d/ppe-offload` 保持 `flow_offloading_hw=1`
 - LuCI 插件 `luci-app-sbe1v1k-diag` 已内置,在「系统 → SBE1V1K 诊断」页面可直接读取上述节点信息(PPE/EIP debugfs、硬件计数器、卸载配置、模块与 ABI 符号)。
-- LuCI 插件 `luci-app-sbe1v1k-netmode` 已内置,在「网络 → SBE1V1K 网络模式」页面可在主路由 / 旁路由 / 中继三种模式间一键切换,切换失败时自动回滚(默认 180 秒)。
+- LuCI 插件 `luci-app-sbe1v1k-netmode` 已内置,在「网络 → SBE1V1K 网络模式」页面可在主路由 / 旁路由 / 中继三种模式间一键切换；旁路由可从上游 DHCP 自动读取地址参数，中继可扫描并选择上游 Wi-Fi，切换失败时自动回滚(默认 180 秒)。
 - IPQ9570 NPU:当前内核与 feeds 中暂无 NPU 监控软件包,暂无可监控项。
 
 若并行构建失败：
