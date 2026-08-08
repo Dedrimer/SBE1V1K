@@ -14,4 +14,9 @@ define Package/$(PKG_NAME)/conffiles
 /etc/config/sbe1v1k_netmode
 endef
 
+define Package/$(PKG_NAME)/postinst
+#!/bin/sh
+chmod 600 "$${IPKG_INSTROOT}/etc/config/sbe1v1k_netmode" 2>/dev/null || true
+endef
+
 # call BuildPackage - OpenWrt buildroot signature

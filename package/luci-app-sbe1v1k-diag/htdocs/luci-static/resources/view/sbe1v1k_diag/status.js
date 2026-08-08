@@ -2,16 +2,16 @@
 
 'require view';
 
-function esc(s)
+const BASE = L.url('admin/system/sbe1v1k_diag/status');
+
+function plain(s)
 {
-	return String(s ?? '').replace(/[&<>"']/g, function(ch) {
-		return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
-	});
+	return String(s ?? '');
 }
 
 function fetchData()
 {
-	return fetch('/cgi-bin/luci/admin/system/sbe1v1k_diag/status', {
+	return fetch(BASE, {
 		headers: { 'X-Requested-With': 'XMLHttpRequest' }
 	}).then(function(r) {
 		if (!r.ok)
@@ -84,7 +84,7 @@ function fmtUptime(sec)
 	return s + ' ' + _('秒');
 }
 
-function counterSummary(c)
+function counterSummary(c, warnNonzero)
 {
 	if (!c)
 		return statusBadge(false, _('不可用'));
@@ -93,7 +93,9 @@ function counterSummary(c)
 		return statusBadge(true, _('正常') + ' · ' + fmtNum(c.total) + ' 项全部为 0');
 
 	return E('div', {}, c.nonzero.map(function(n) {
-		return E('div', { 'class': 'sbe1v1k-nonzero' }, [ esc(n.name) + ' = ' + fmtNum(n.value) ]);
+		return E('div', { 'class': warnNonzero ? 'sbe1v1k-nonzero' : 'sbe1v1k-counter' }, [
+			plain(n.name) + ' = ' + fmtNum(n.value)
+		]);
 	}));
 }
 
@@ -104,7 +106,7 @@ function qmSection(qm)
 
 	var rows = qm.queues.map(function(q) {
 		return [
-			esc(q.queue),
+			plain(q.queue),
 			fmtNum(q.tx),
 			fmtNum(q.pend),
 			fmtNum(q.drop),
@@ -148,7 +150,7 @@ function portSection(rx, tx)
 	return table([ _('端口'), _('RX'), _('RX_DROP'), _('TX'), _('TX_DROP') ],
 		list.map(function(p) {
 			return [
-				esc('0x' + p.port),
+				plain('0x' + p.port),
 				fmtNum(p.rx),
 				fmtNum(p.rx_drop),
 				fmtNum(p.tx),
@@ -181,22 +183,25 @@ function dsSection(ds)
 
 	if (ds.flow_enqueue_map && ds.flow_enqueue_map.length)
 		children = children.concat(kvRows([
-			[ _('flow_enqueue_map'), esc(ds.flow_enqueue_map.join(', ')) ]
+			[ _('flow_enqueue_map'), plain(ds.flow_enqueue_map.join(', ')) ]
 		]));
 
 	if (ds.port_qmaps && ds.port_qmaps.length)
 		children.push(E('pre', { 'class': 'sbe1v1k-pre' }, [ ds.port_qmaps.join('\n') ]));
 
 	if (ds.nodes && ds.nodes.length)
-		children.push(table([ _('节点'), _('状态'), _('Ring'), _('队列'), _('enqueue_vp'), _('Profile'), _('运行') ],
+		children.push(table([ _('节点'), _('状态'), _('Ring'), _('队列'), _('enqueue_vp'), _('Profile'), _('Queue Profile'), _('PPE2TCL 待处理'), _('REO2PPE 待处理'), _('运行') ],
 			ds.nodes.map(function(n) {
 				return [
 					fmtNum(n.node),
 					fmtNum(n.state),
 					fmtNum(n.ring),
-					esc(n.queues),
+						plain(n.queues),
 					fmtNum(n.enqueue_vp),
 					fmtNum(n.profile),
+					fmtNum(n.queue_profile),
+					fmtNum(n.ppe2tcl_pending),
+					fmtNum(n.reo2ppe_pending),
 					n.start === 1 ? _('是') : _('否')
 				];
 			})));
@@ -210,7 +215,7 @@ function edmaSection(edma)
 		return E('div', {}, [ _('不可用') ]);
 
 	return kvRows([
-		[ _('错误统计'), counterSummary(edma.err) ],
+		[ _('错误统计'), counterSummary(edma.err, true) ],
 		[ _('RX Ring'), counterSummary(edma.rx) ],
 		[ _('TX Ring'), counterSummary(edma.tx) ]
 	]);
@@ -226,21 +231,28 @@ function ath12kSection(list)
 	return E('div', {}, list.map(function(a) {
 		var s = a.stats || {};
 		var rows = [
-			[ _('RX 错误'), counterSummary(s.rx) ],
-			[ _('TX 错误'), counterSummary(s.tx) ]
+			[ _('RX 统计'), counterSummary(s.rx) ],
+			[ _('TX 统计'), counterSummary(s.tx) ]
 		];
 
 		if (s.direct_switch) {
 			var ds = s.direct_switch;
 
 			rows.push([ _('直通开关'), statusBadge(ds.started === 1, _('已注册') + ' ' + fmtNum(ds.registered) + ' · ' + _('已启动') + ' ' + fmtNum(ds.started)) ]);
-			rows.push([ _('ppe2tcl 更新'), fmtNum(ds.ppe2tcl_cons) ]);
+			rows.push([ _('PPE2TCL 更新 (prod/cons)'), fmtNum(ds.ppe2tcl_prod) + ' / ' + fmtNum(ds.ppe2tcl_cons) ]);
+			rows.push([ _('REO2PPE 更新 (prod/cons)'), fmtNum(ds.reo2ppe_prod) + ' / ' + fmtNum(ds.reo2ppe_cons) ]);
+			rows.push([ _('PPE2TCL Ring (prod/cons/pending)'), ds.ppe2tcl_index
+				? fmtNum(ds.ppe2tcl_index.prod) + ' / ' + fmtNum(ds.ppe2tcl_index.cons) + ' / ' + fmtNum(ds.ppe2tcl_index.pending)
+				: _('不可用') ]);
+			rows.push([ _('REO2PPE Ring (prod/cons/pending)'), ds.reo2ppe_index
+				? fmtNum(ds.reo2ppe_index.prod) + ' / ' + fmtNum(ds.reo2ppe_index.cons) + ' / ' + fmtNum(ds.reo2ppe_index.pending)
+				: _('不可用') ]);
 			rows.push([ _('TX 分配'), fmtNum(ds.tx_alloc) + ' / ' + _('失败') + ' ' + fmtNum(ds.tx_alloc_fail) ]);
 			rows.push([ _('RX 完成 / 丢弃'), fmtNum(ds.rx_complete) + ' / ' + fmtNum(ds.rx_drop) ]);
 		}
 
 		return E('div', { 'class': 'sbe1v1k-node' }, [
-			E('div', { 'class': 'sbe1v1k-node-name' }, [ esc(a.id) ])
+			E('div', { 'class': 'sbe1v1k-node-name' }, [ plain(a.id) ])
 		].concat(kvRows(rows)));
 	}));
 }
@@ -257,7 +269,7 @@ function ringTable(rings)
 			var s = r.stats || {};
 
 			return [
-				esc(r.name),
+				plain(r.name),
 				fmtNum(s.tx_packets),
 				fmtNum(s.tx_error),
 				fmtNum(s.rx_packets),
@@ -276,7 +288,7 @@ function ctxSection(ctxs)
 
 	return E('div', {}, ctxs.map(function(c) {
 		return E('div', { 'class': 'sbe1v1k-node' }, [
-			E('div', { 'class': 'sbe1v1k-node-name' }, [ esc(c.name) ]),
+			E('div', { 'class': 'sbe1v1k-node-name' }, [ plain(c.name) ]),
 			counterSummary(c.stats)
 		]);
 	}));
@@ -290,7 +302,7 @@ function svcSection(svcs)
 		return E('div', {}, [ _('无算法服务统计') ]);
 
 	return kvRows(svcs.map(function(s) {
-		return [ esc(s.name), counterSummary(s.stats) ];
+		return [ plain(s.name), counterSummary(s.stats) ];
 	}));
 }
 
@@ -303,11 +315,34 @@ function irqTable(irqs)
 
 	return table([ _('IRQ'), _('计数'), _('Ring') ],
 		irqs.map(function(i) {
-			return [ fmtNum(i.irq), fmtNum(i.count), esc(i.name) ];
+			return [ fmtNum(i.irq), fmtNum(i.count), plain(i.name) ];
 		}));
 }
 
-const SBE1V1K_CSS = '.sbe1v1k-table th, .sbe1v1k-table td { text-align: center; }';
+function cpuCodeTable(codes)
+{
+	codes = codes || [];
+
+	if (!codes.length)
+		return E('div', { 'class': 'sbe1v1k-missing' }, [ _('无 CPU reason/dropcode 数据') ]);
+
+	return table([ _('端口'), _('Reason'), _('Dropcode') ], codes.map(function(c) {
+		return [ plain('0x' + c.port), fmtNum(c.code), fmtNum(c.dropcode) ];
+	}));
+}
+
+const SBE1V1K_CSS = [
+	'.sbe1v1k-table { width: 100%; border-collapse: collapse; }',
+	'.sbe1v1k-table th, .sbe1v1k-table td { text-align: center; padding: .5em; border-bottom: 1px solid #ddd; }',
+	'.sbe1v1k-ok { color: #188038; font-weight: bold; }',
+	'.sbe1v1k-bad, .sbe1v1k-nonzero { color: #d93025; font-weight: bold; }',
+	'.sbe1v1k-counter { color: inherit; }',
+	'.sbe1v1k-missing { color: #777; font-style: italic; }',
+	'.sbe1v1k-pre { overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }',
+	'.sbe1v1k-node { margin: .5em 0; padding: .75em; border: 1px solid #ddd; border-radius: 4px; }',
+	'.sbe1v1k-node-name { font-weight: bold; margin-bottom: .5em; }',
+	'.sbe1v1k-loading { padding: 2em; text-align: center; }'
+].join('\n');
 
 return view.extend({
 	load: function()
@@ -336,7 +371,7 @@ return view.extend({
 		}).bind(this)).catch((function(err) {
 			loading.innerHTML = '';
 			loading.appendChild(E('div', { 'class': 'alert-message warning' }, [
-				_('读取失败: ') + esc(err.message)
+				_('读取失败: ') + plain(err.message)
 			]));
 			this.page = loading;
 		}).bind(this));
@@ -362,18 +397,20 @@ return view.extend({
 			: statusBadge(false, _('硬件卸载未启用'));
 
 		var ppeOk = !!(ppe.qm && ppe.qm.queues.length) || !!(ppe.flows);
-		var eipOk = eip.dt && eip.dt.status !== 'missing';
+		var dtStatus = eip.dt && eip.dt.status;
+		var eipDtOk = dtStatus === 'okay' || dtStatus === 'ok';
+		var eipOk = eipDtOk && !!eip.debugfs && Number(eip.algorithms || 0) > 0;
 
 		return E('div', {}, [
 			E('style', {}, [ SBE1V1K_CSS ]),
 			E('div', { 'class': 'cbi-map' }, [
 				E('h2', {}, [ _('概览') ]),
 				section(_('设备'), kvRows([
-					[ _('型号'), esc(d.model || 'unknown') ],
-					[ _('运行时间'), esc(d.uptime ? fmtUptime(d.uptime.up) : '-') ],
+					[ _('型号'), plain(d.model || 'unknown').trim() ],
+					[ _('运行时间'), plain(d.uptime ? fmtUptime(d.uptime.up) : '-') ],
 					[ _('防火墙卸载'), offload ],
 					[ _('PPE 驱动'), ppeOk ? statusBadge(true, _('节点可读')) : statusBadge(false, _('无 PPE 节点')) ],
-					[ _('EIP 加密'), eipOk ? statusBadge(true, _('DT 节点存在')) : statusBadge(false, _('无 EIP 节点')) ]
+					[ _('EIP 加密'), eipOk ? statusBadge(true, _('运行节点可用')) : statusBadge(false, _('加速不可用')) ]
 				])),
 				section(_('内核模块'), (function() {
 					var mods = d.modules || [];
@@ -384,10 +421,10 @@ return view.extend({
 					return table([ _('模块'), _('大小'), _('引用'), _('依赖'), _('类型') ],
 						mods.map(function(m) {
 							return [
-								esc(m.name),
+								plain(m.name),
 								fmtNum(m.size),
 								fmtNum(m.refs),
-								esc(m.deps || '-'),
+								plain(m.deps || '-'),
 								m.out_of_tree ? 'O' : '-'
 							];
 						}));
@@ -404,7 +441,10 @@ return view.extend({
 				E('h2', {}, [ _('PPE 硬件加速') ]),
 				section(_('队列 QM'), qmSection(ppe.qm)),
 				section(_('端口收发'), portSection(ppe.port_rx, ppe.port_tx)),
+				section(_('CPU Reason / Dropcode'), cpuCodeTable(ppe.cpu_code)),
 				section(_('流表'), flowsSection(ppe.flows)),
+				section(_('EIP 外层流节点'), ppe.eip_outer_flows
+					? statusBadge(true, _('节点可读')) : statusBadge(false, _('节点不可用'))),
 				section(_('直通开关'), dsSection(ppe.direct_switch)),
 				section(_('EDMA'), edmaSection(ppe.edma)),
 				section(_('ath12k DP'), ath12kSection(ppe.ath12k))
@@ -413,11 +453,14 @@ return view.extend({
 			E('div', { 'class': 'cbi-map' }, [
 				E('h2', {}, [ _('EIP 加密加速器') ]),
 				section(_('设备树节点'), kvRows([
-					[ _('路径'), esc(eip.dt ? eip.dt.node || '-' : '-') ],
-					[ _('状态'), eipOk ? statusBadge(true, esc(eip.dt.status)) : statusBadge(false, _('缺失')) ],
-					[ _('inline 使能'), esc(eip.dt ? eip.dt.inline_enabled : '-') ],
-					[ _('外层卸载'), esc(eip.dt ? eip.dt.outer_offload : '-') ],
-					[ _('内层卸载'), esc(eip.dt ? eip.dt.inner_offload : '-') ]
+					[ _('路径'), plain(eip.dt ? eip.dt.node || '-' : '-') ],
+					[ _('状态'), eipDtOk ? statusBadge(true, plain(dtStatus)) : statusBadge(false, plain(dtStatus || _('缺失'))) ],
+					[ _('debugfs'), eip.debugfs ? statusBadge(true, _('可读')) : statusBadge(false, _('不可用')) ],
+					[ _('Crypto API 算法'), Number(eip.algorithms || 0) > 0
+						? statusBadge(true, fmtNum(eip.algorithms)) : statusBadge(false, '0') ],
+					[ _('inline 使能'), plain(eip.dt ? eip.dt.inline_enabled : '-') ],
+					[ _('外层卸载'), plain(eip.dt ? eip.dt.outer_offload : '-') ],
+					[ _('内层卸载'), plain(eip.dt ? eip.dt.inner_offload : '-') ]
 				])),
 				section(_('固件'), preBlock((function() {
 					var f = eip.firmware || {};

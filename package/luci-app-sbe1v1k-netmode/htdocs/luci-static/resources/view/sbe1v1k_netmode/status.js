@@ -8,18 +8,18 @@
  * 应用后会自动启用回滚看门狗，避免切换失败导致设备失联。
  */
 
-const BASE = '/cgi-bin/luci/admin/network/sbe1v1k_netmode';
+const BASE = L.url('admin/network/sbe1v1k_netmode');
 
 const MODE_LABELS = {
-	router:   '主路由',
-	bypass:   '旁路由',
-	repeater: '中继'
+	router:   _('主路由'),
+	bypass:   _('旁路由'),
+	repeater: _('中继')
 };
 
 const MODE_DESCS = {
-	router:   '标准 OpenWrt 主路由：LAN 桥接 + DHCP，WAN 接上级光猫/交换机',
-	bypass:   '关闭 DHCP，使用主路由网段静态 IP，网关指向主路由',
-	repeater: '通过 Wi-Fi 连接上游路由器，有线 + 无线客户端共享上游网络'
+	router:   _('标准 OpenWrt 主路由：LAN 桥接 + DHCP，WAN 接上级光猫/交换机'),
+	bypass:   _('关闭 DHCP，使用主路由网段静态 IP，网关指向主路由'),
+	repeater: _('通过 Wi-Fi 连接上游路由器，有线 + 无线客户端共享上游网络')
 };
 
 const BAND_LABELS = {
@@ -29,17 +29,16 @@ const BAND_LABELS = {
 };
 
 const ENC_LABELS = {
-	'none':      '无加密 (开放)',
+	'none':      _('无加密 (开放)'),
+	'owe':       _('OWE (增强型开放)'),
 	'psk2':      'WPA2-PSK',
 	'sae':       'WPA3-SAE',
 	'sae-mixed': 'WPA2/WPA3 混合'
 };
 
-function esc(s)
+function plain(s)
 {
-	return String(s ?? '').replace(/[&<>"']/g, function(ch) {
-		return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
-	});
+	return String(s ?? '');
 }
 
 function csrfToken()
@@ -102,7 +101,7 @@ function kvRows(rows)
 
 function fmtMode(mode)
 {
-	return MODE_LABELS[mode] || esc(mode || '-');
+	return MODE_LABELS[mode] || plain(mode || '-');
 }
 
 function modeBadge(mode)
@@ -122,15 +121,19 @@ function buildStatus(d)
 
 	var rows = [
 		[ _('当前模式'), modeBadge(d.mode) ],
-		[ _('LAN 地址'), esc((lan.ipaddrs && lan.ipaddrs.length) ? lan.ipaddrs.join(', ') : '-') ],
+		[ _('LAN 地址'), plain((lan.ipaddrs && lan.ipaddrs.length) ? lan.ipaddrs.join(', ') : '-') ],
 		[ _('LAN 运行'), (lan.runtime && lan.runtime.up) ? badge(true, _('已连接')) : badge(false, _('未连接')) ],
 		[ _('DHCP 服务'), dhcp.ignore ? badge(false, _('已关闭（由上游分配）')) : badge(true, _('开启')) ]
 	];
 
+	if (d.stored && d.stored.mode && d.stored.mode !== d.mode)
+		rows.push([ _('已保存目标模式'), modeBadge(d.stored.mode) ]);
+
 	if (wan && wan.exists) {
 		rows.push([ _('WAN'), wan.disabled
 			? badge(false, _('已禁用'))
-			: E('span', {}, [ esc(wan.proto || '-') + ' · ' + ((wan.runtime && wan.runtime.up) ? badge(true, _('已连接')) : badge(false, _('未连接'))) ]) ]);
+			: E('span', {}, [ plain(wan.proto || '-'), ' · ',
+				(wan.runtime && wan.runtime.up) ? badge(true, _('已连接')) : badge(false, _('未连接')) ]) ]);
 	}
 	else {
 		rows.push([ _('WAN'), badge(false, _('未配置')) ]);
@@ -138,7 +141,7 @@ function buildStatus(d)
 
 	if (wwan && wwan.exists) {
 		rows.push([ _('上行 Wi-Fi'), E('span', {}, [
-			esc(wwan.ssid || '-'),
+			 plain(wwan.ssid || '-'),
 			' · ' + ((wwan.runtime && wwan.runtime.up) ? _('已连接') : _('未连接'))
 		]) ]);
 	}
@@ -151,37 +154,77 @@ function buildStatus(d)
 
 function buildPending(p)
 {
-	if (!p || !p.active)
-		return null;
-
 	if (countdownTimer) {
 		clearInterval(countdownTimer);
 		countdownTimer = null;
 	}
 
-	var remaining = (p.remaining != null) ? p.remaining : p.timeout;
+	if (!p || !p.active)
+		return null;
 
-	var left = E('span', { 'id': 'sbe1v1k-countdown' }, [ String(remaining) ]);
+	var remaining = (p.remaining != null) ? p.remaining : null;
+	var phase = p.phase || 'unknown';
+	var phaseText = {
+		queued: _('任务已排队，正在等待执行…'),
+		applying: _('正在应用并检查网络配置…'),
+		applied: _('配置已应用，等待确认'),
+		reverting: _('正在恢复应用前的配置…')
+	}[phase] || _('正在处理网络配置…');
+
+	var left = E('span', { 'id': 'sbe1v1k-countdown' }, [ remaining != null ? String(remaining) : '-' ]);
+	var ticks = 0;
 
 	countdownTimer = setInterval(function() {
-		remaining--;
-		if (remaining <= 0) {
+		ticks++;
+		if (remaining != null)
+			remaining--;
+
+		if (remaining != null && remaining <= 0) {
 			clearInterval(countdownTimer);
 			countdownTimer = null;
 			refresh();
 			return;
 		}
-		left.innerHTML = String(remaining);
+
+		left.textContent = remaining != null ? String(remaining) : '-';
+		if (phase !== 'applied' && ticks % 2 === 0)
+			refresh();
 	}, 1000);
 
+	var actions = [];
+
+	if (phase === 'applied')
+		actions.push(E('button', {
+			'class': 'cbi-button cbi-button-apply',
+			'click': function(ev) { ev.preventDefault(); confirmApply(p.request_id); }
+		}, [ _('保留配置') ]));
+
+	actions.push(E('button', {
+		'class': 'cbi-button cbi-button-reset',
+		'click': function(ev) { ev.preventDefault(); revertApply(p.request_id); }
+	}, [ _('立即回滚') ]));
+
 	return E('div', { 'class': 'alert-message warning' }, [
-		E('h4', {}, [ _('配置已应用，等待确认') ]),
-		E('p', {}, [ _('网络将在 '), left, _(' 秒后自动回滚。如果切换后仍然可以访问本页面，请点击“保留配置”；如果无法访问，请等待自动恢复。') ]),
-		E('div', { 'class': 'right' }, [
-			E('button', { 'class': 'cbi-button cbi-button-apply', 'click': confirmApply }, [ _('保留配置') ]),
-			E('button', { 'class': 'cbi-button cbi-button-reset', 'click': revertApply }, [ _('立即回滚') ])
-		])
+		E('h4', {}, [ phaseText ]),
+		E('p', {}, [ _('自动回滚剩余时间：'), left, _(' 秒。只有应用任务完成后才能保留配置。') ]),
+		E('div', { 'class': 'right' }, actions)
 	]);
+}
+
+function buildResult(result)
+{
+	if (!result || result.status === 'applied')
+		return null;
+
+	var messages = {
+		error: _('上次网络切换失败：') + plain(result.message),
+		reverted: _('已恢复应用前的网络配置。'),
+		confirmed: _('网络配置已确认并保留。')
+	};
+
+	return E('div', {
+		'class': result.status === 'error' ? 'alert-message error' : 'alert-message notice'
+	}, [ messages[result.status] || plain(result.message) ]);
 }
 
 /* ---------------- mode cards & forms ---------------- */
@@ -229,6 +272,15 @@ function buildForm(mode, d)
 {
 	var s = d.stored || {};
 	var curLan = (d.lan && d.lan.ipaddrs && d.lan.ipaddrs.length) ? d.lan.ipaddrs[0].split('/')[0] : '192.168.1.1';
+	var bands = [];
+
+	(d.radios || []).forEach(function(r) {
+		if (BAND_LABELS[r.band] && bands.indexOf(r.band) < 0)
+			bands.push(r.band);
+	});
+
+	if (!bands.length)
+		bands = [ '5g', '2g', '6g' ];
 
 	var common = [
 		textRow('sbe1v1k-lan-ip', _('LAN IP 地址'), s.lan_ip || curLan, '192.168.1.1'),
@@ -250,14 +302,14 @@ function buildForm(mode, d)
 	}
 	else if (mode === 'repeater') {
 		extra = [
-			selectRow('sbe1v1k-band', _('上行频段'), [ '5g', '2g', '6g' ].map(function(b) {
+			selectRow('sbe1v1k-band', _('上行频段'), bands.map(function(b) {
 				return [ b, BAND_LABELS[b] ];
 			}), s.band || '5g'),
 			textRow('sbe1v1k-ssid', _('上游 Wi-Fi 名称 (SSID)'), s.ssid || '', ''),
-			selectRow('sbe1v1k-enc', _('加密方式'), [ 'psk2', 'sae-mixed', 'sae', 'none' ].map(function(e) {
+			selectRow('sbe1v1k-enc', _('加密方式'), [ 'psk2', 'sae-mixed', 'sae', 'owe', 'none' ].map(function(e) {
 				return [ e, ENC_LABELS[e] ];
 			}), s.encryption || 'psk2'),
-			textRow('sbe1v1k-key', _('Wi-Fi 密码'), s.key || '', '', 'password'),
+			textRow('sbe1v1k-key', _('Wi-Fi 密码'), '', s.key_set ? _('留空保持已保存密码') : '', 'password'),
 			E('div', { 'class': 'cbi-value' }, [
 				E('div', { 'class': 'cbi-value-field', 'style': 'color:#666' }, [ _('提示：LAN IP 必须与主路由同网段且未被占用，例如主路由为 192.168.1.1 时填 192.168.1.2。') ])
 			])
@@ -322,24 +374,32 @@ function doApply()
 			btn.disabled = false;
 			btn.innerHTML = _('应用当前模式');
 		}
-		showMessage(_('应用失败: ') + esc(err.message), true);
+		showMessage(_('应用失败: ') + plain(err.message), true);
 	});
 }
 
-function confirmApply()
+function confirmApply(requestId)
 {
-	api('/confirm').then(fetchStatus).then(rebuild).catch(function(err) {
-		showMessage(_('确认失败: ') + esc(err.message), true);
+	api('/confirm', { request_id: requestId }).then(function(r) {
+		if (!r.ok)
+			throw new Error(r.error || _('确认失败'));
+		return fetchStatus();
+	}).then(rebuild).catch(function(err) {
+		showMessage(_('确认失败: ') + plain(err.message), true);
 	});
 }
 
-function revertApply()
+function revertApply(requestId)
 {
 	if (!confirm(_('立即回滚到应用前的网络配置？')))
 		return;
 
-	api('/revert').then(fetchStatus).then(rebuild).catch(function(err) {
-		showMessage(_('回滚失败: ') + esc(err.message), true);
+	api('/revert', { request_id: requestId }).then(function(r) {
+		if (!r.ok)
+			throw new Error(r.error || _('回滚失败'));
+		return fetchStatus();
+	}).then(rebuild).catch(function(err) {
+		showMessage(_('回滚失败: ') + plain(err.message), true);
 	});
 }
 
@@ -385,6 +445,10 @@ function rebuild(d)
 	if (!root)
 		return;
 
+	if ((!d.pending || !d.pending.active) && d.result &&
+	    [ 'error', 'reverted' ].indexOf(d.result.status) >= 0)
+		selectedMode = d.mode || 'router';
+
 	root.innerHTML = '';
 	root.appendChild(build(d));
 }
@@ -392,7 +456,7 @@ function rebuild(d)
 function refresh()
 {
 	fetchStatus().then(rebuild).catch(function(err) {
-		showMessage(_('读取状态失败: ') + esc(err.message), true);
+		showMessage(_('读取状态失败: ') + plain(err.message), true);
 	});
 }
 
@@ -432,16 +496,19 @@ return view.extend({
 	{
 		lastData = d;
 		messageBox = E('div', {}, []);
+		var pending = d.pending && d.pending.active;
 
 		var applyBtn = E('button', {
 			'id': 'sbe1v1k-apply-btn',
 			'class': 'cbi-button cbi-button-apply',
+			'disabled': pending || null,
 			'click': function(ev) { ev.preventDefault(); doApply(); }
-		}, [ _('应用当前模式') ]);
+		}, [ pending ? _('切换进行中…') : _('应用当前模式') ]);
 
 		return E('div', {}, [
 			E('style', {}, [ SBE1V1K_CSS ]),
 			buildPending(d.pending),
+			buildResult(d.result),
 			E('div', { 'class': 'cbi-map' }, [
 				E('h2', {}, [ _('网络模式切换') ]),
 				buildStatus(d),

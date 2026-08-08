@@ -1,21 +1,5 @@
 'use strict';
 
-/*
- * SBE1V1K network mode switch backend.
- *
- * Modes:
- *   router   - classic OpenWrt main router (LAN bridge + DHCP + WAN)
- *   bypass   - LAN bridge with static IP + gateway pointing at the main
- *              router, DHCP handled by the upstream router
- *   repeater - one radio joins the upstream Wi-Fi (station), LAN is relayed
- *              onto the same subnet through relayd
- *
- * Applying a mode stores the parameters in /etc/config/sbe1v1k_netmode and
- * runs /usr/sbin/sbe1v1k-netmode-apply in the background.  The apply script
- * takes a snapshot of network/wireless/dhcp and arms a rollback watchdog so
- * a broken switch can never lock the user out permanently.
- */
-
 import { popen, open, stat } from 'fs';
 import { cursor } from 'uci';
 import { connect } from 'ubus';
@@ -23,15 +7,19 @@ import { connect } from 'ubus';
 const CFG = 'sbe1v1k_netmode';
 const STATE_DIR = '/tmp/sbe1v1k-netmode';
 const PENDING = STATE_DIR + '/pending';
-const WATCHDOG_PID = STATE_DIR + '/watchdog.pid';
+const RESULT = STATE_DIR + '/result';
+const SUBMIT_LOCK = STATE_DIR + '/submit.lock';
 const BACKUP_DIR = '/etc/sbe1v1k-netmode-backup';
 const APPLY_SCRIPT = '/usr/sbin/sbe1v1k-netmode-apply';
 const RESTORE_SCRIPT = '/usr/sbin/sbe1v1k-netmode-restore';
 const DEFAULT_TIMEOUT = 180;
+const MAX_TIMEOUT = 600;
+const UPLINK = 'sbe1v1k_wwan';
+const RELAY = 'sbe1v1k_relay';
 
 const MODES = [ 'router', 'bypass', 'repeater' ];
 const BANDS = [ '2g', '5g', '6g' ];
-const ENCS = [ 'none', 'psk2', 'sae', 'sae-mixed' ];
+const ENCS = [ 'none', 'owe', 'psk2', 'sae', 'sae-mixed' ];
 
 function run(cmd)
 {
@@ -53,27 +41,76 @@ function read_text(path)
 	if (!fd)
 		return null;
 
-	let data = fd.read(4096);
+	let data = fd.read(65536);
 
 	fd.close();
 	return data;
 }
 
-function valid_ip(s)
+function write_text(path, data)
+{
+	let fd = open(path, 'w');
+
+	if (!fd)
+		return false;
+
+	fd.write(data);
+	fd.close();
+	return true;
+}
+
+function parse_state(data)
+{
+	let out = {};
+
+	for (let line in split(data ?? '', '\n')) {
+		let pos = index(line, '=');
+
+		if (pos > 0)
+			out[substr(line, 0, pos)] = substr(line, pos + 1);
+	}
+
+	return out;
+}
+
+function array_contains(arr, val)
+{
+	for (let item in arr)
+		if (item == val)
+			return true;
+
+	return false;
+}
+
+function ipv4_parts(s)
 {
 	if (type(s) != 'string' || s == '')
-		return false;
+		return null;
 
 	let m = match(s, /^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$/);
 
 	if (m == null)
-		return false;
+		return null;
 
-	for (let i = 1; i <= 4; i++)
-		if (int(m[i]) > 255)
-			return false;
+	let out = [];
 
-	return true;
+	for (let i = 1; i <= 4; i++) {
+		let octet = int(m[i]);
+
+		if (octet < 0 || octet > 255)
+			return null;
+
+		push(out, octet);
+	}
+
+	return out;
+}
+
+function valid_unicast_ip(s)
+{
+	let p = ipv4_parts(s);
+
+	return p != null && p[0] > 0 && p[0] < 224 && p[0] != 127;
 }
 
 function valid_prefix(s)
@@ -86,42 +123,71 @@ function valid_prefix(s)
 	return n >= 8 && n <= 30;
 }
 
-function valid_band(s)
+function ip_number(parts)
 {
-	for (let b in BANDS)
-		if (s == b)
-			return true;
-
-	return false;
+	return parts[0] * 16777216 + parts[1] * 65536 + parts[2] * 256 + parts[3];
 }
 
-function valid_enc(s)
+function subnet_block(prefix)
 {
-	for (let e in ENCS)
-		if (s == e)
-			return true;
+	let block = 1;
 
-	return false;
+	for (let i = int(prefix); i < 32; i++)
+		block *= 2;
+
+	return block;
 }
 
-function array_contains(arr, val)
+function valid_host_ip(s, prefix)
 {
-	for (let x in arr)
-		if (x == val)
-			return true;
+	let parts = ipv4_parts(s);
 
-	return false;
+	if (parts == null || !valid_unicast_ip(s))
+		return false;
+
+	let block = subnet_block(prefix);
+	let host = ip_number(parts) % block;
+
+	return host != 0 && host != block - 1;
 }
 
-/*
- * Detect the effective mode from the live UCI config, independently of what
- * the plugin previously stored.
- */
+function same_subnet(a, b, prefix)
+{
+	let pa = ipv4_parts(a);
+	let pb = ipv4_parts(b);
+
+	if (pa == null || pb == null)
+		return false;
+
+	let block = subnet_block(prefix);
+
+	return int(ip_number(pa) / block) == int(ip_number(pb) / block);
+}
+
+function valid_key(enc, key)
+{
+	if (enc == 'none' || enc == 'owe')
+		return key == null || key == '';
+
+	if (type(key) != 'string')
+		return false;
+
+	if (enc == 'psk2' && length(key) == 64)
+		return match(key, /^[0-9a-fA-F]{64}$/) != null;
+
+	return length(key) >= 8 && length(key) <= 63;
+}
+
+function valid_request_id(id)
+{
+	return type(id) == 'string' && match(id, /^[0-9a-fA-F-]+$/) != null;
+}
+
 function detect_mode(cu)
 {
-	let has_sta = false;
 	let has_relay = false;
-	let has_gw = false;
+	let has_gateway = false;
+	let dhcp_ignored = false;
 
 	cu.load('network');
 	cu.foreach('network', 'interface', function(s) {
@@ -129,20 +195,16 @@ function detect_mode(cu)
 
 		if (cu.get('network', name, 'proto') == 'relay')
 			has_relay = true;
-		else if (name == 'lan' && cu.get('network', 'lan', 'gateway') != null)
-			has_gw = true;
 	});
 
-	cu.load('wireless');
-	cu.foreach('wireless', 'wifi-iface', function(s) {
-		if (cu.get('wireless', s['.name'], 'mode') == 'sta')
-			has_sta = true;
-	});
+	has_gateway = cu.get('network', 'lan', 'gateway') != null;
+	cu.load('dhcp');
+	dhcp_ignored = cu.get('dhcp', 'lan', 'ignore') == '1';
 
-	if (has_relay || has_sta)
+	if (has_relay)
 		return 'repeater';
 
-	if (has_gw)
+	if (has_gateway && dhcp_ignored)
 		return 'bypass';
 
 	return 'router';
@@ -165,17 +227,17 @@ function collect_radios(cu)
 		});
 	});
 
-	for (let r in out) {
+	for (let radio in out) {
 		let ifaces = [];
 
-		cu.load('wireless');
 		cu.foreach('wireless', 'wifi-iface', function(s) {
 			let name = s['.name'];
 
-			if (cu.get('wireless', name, 'device') != r.name)
+			if (cu.get('wireless', name, 'device') != radio.name)
 				return;
 
 			push(ifaces, {
+				name,
 				mode: cu.get('wireless', name, 'mode') ?? 'ap',
 				ssid: cu.get('wireless', name, 'ssid'),
 				encryption: cu.get('wireless', name, 'encryption'),
@@ -184,33 +246,39 @@ function collect_radios(cu)
 			});
 		});
 
-		r.ifaces = ifaces;
+		radio.ifaces = ifaces;
 	}
 
 	return out;
 }
 
-function iface_runtime(ubus, name)
+function interface_dump(ubus)
 {
-	let out = { up: false, addrs: [] };
-
 	if (ubus == null)
+		return [];
+
+	let response = ubus.call('network.interface', 'dump', {});
+	let interfaces = type(response) == 'object' ? response.interface : response;
+
+	return type(interfaces) == 'array' ? interfaces : [];
+}
+
+function iface_runtime(interfaces, name)
+{
+	let out = { up: false, pending: false, addrs: [] };
+
+	if (type(interfaces) != 'array')
 		return out;
 
-	let dump = ubus.call('network.interface', 'dump', {});
-
-	if (type(dump) != 'array')
-		return out;
-
-	for (let i in dump) {
-		if (dump[i].interface != name)
+	for (let iface in interfaces) {
+		if (iface.interface != name)
 			continue;
 
-		out.up = !!dump[i].up;
-		out.pending = !!dump[i].pending;
+		out.up = !!iface.up;
+		out.pending = !!iface.pending;
 
-		for (let a in (dump[i]['ipv4-address'] ?? []))
-			push(out.addrs, a.address + '/' + a.mask);
+		for (let addr in (iface['ipv4-address'] ?? []))
+			push(out.addrs, addr.address + '/' + addr.mask);
 
 		break;
 	}
@@ -220,38 +288,48 @@ function iface_runtime(ubus, name)
 
 function collect_pending()
 {
-	let data = read_text(PENDING);
+	let state = parse_state(read_text(PENDING));
 
-	if (data == null || trim(data) == '')
+	if (!valid_request_id(state.request_id))
 		return { active: false };
 
-	let m = match(data, /mode=([a-z]+) timeout=([0-9]+) started=([0-9]+)/);
-	let timeout = 0;
+	let timeout = int(state.timeout ?? 0);
+	let started = int(state.started ?? 0);
 	let remaining = null;
 
-	if (m == null) {
-		m = match(data, /mode=([a-z]+) timeout=([0-9]+)/);
-
-		if (m == null)
-			return { active: true };
-
-		timeout = int(m[2]);
-	}
-	else {
-		timeout = int(m[2]);
-		remaining = max(0, timeout - int(time() - int(m[3])));
-	}
+	if (timeout > 0 && started > 0)
+		remaining = max(0, timeout - int(time() - started));
 
 	return {
 		active: true,
-		mode: m[1],
+		request_id: state.request_id,
+		mode: state.mode,
+		phase: state.phase ?? 'unknown',
 		timeout,
+		started,
 		remaining
+	};
+}
+
+function collect_result()
+{
+	let state = parse_state(read_text(RESULT));
+
+	if (!valid_request_id(state.request_id) || state.status == null)
+		return null;
+
+	return {
+		request_id: state.request_id,
+		status: state.status,
+		updated: int(state.updated ?? 0),
+		message: state.message ?? ''
 	};
 }
 
 function collect(cu, ubus)
 {
+	let interfaces = interface_dump(ubus);
+	let saved_key = cu.get(CFG, 'settings', 'key');
 	let stored = {
 		mode: cu.get(CFG, 'settings', 'mode'),
 		lan_ip: cu.get(CFG, 'settings', 'lan_ip'),
@@ -259,14 +337,13 @@ function collect(cu, ubus)
 		gateway: cu.get(CFG, 'settings', 'gateway'),
 		dns: cu.get(CFG, 'settings', 'dns'),
 		ssid: cu.get(CFG, 'settings', 'ssid'),
-		key: cu.get(CFG, 'settings', 'key'),
+		key_set: type(saved_key) == 'string' && saved_key != '',
 		encryption: cu.get(CFG, 'settings', 'encryption'),
 		band: cu.get(CFG, 'settings', 'band'),
 		timeout: cu.get(CFG, 'settings', 'timeout')
 	};
 
 	cu.load('network');
-
 	let lan_ipaddrs = cu.get_all('network', 'lan')?.ipaddr ?? [];
 
 	if (type(lan_ipaddrs) != 'array')
@@ -283,13 +360,16 @@ function collect(cu, ubus)
 		proto: cu.get('network', 'wan', 'proto'),
 		disabled: cu.get('network', 'wan', 'disabled') == '1'
 	};
+	let uplink_name = cu.get('network', UPLINK) != null ? UPLINK : 'wwan';
+	let relay_name = cu.get('network', RELAY) != null ? RELAY : 'relay';
 	let wwan = {
-		exists: cu.get('network', 'wwan') != null,
-		proto: cu.get('network', 'wwan', 'proto')
+		exists: cu.get('network', uplink_name) != null,
+		proto: cu.get('network', uplink_name, 'proto'),
+		ssid: null
 	};
 	let relay = {
-		exists: cu.get('network', 'relay') != null,
-		networks: cu.get('network', 'relay', 'network')
+		exists: cu.get('network', relay_name) != null,
+		networks: cu.get('network', relay_name, 'network')
 	};
 
 	cu.load('dhcp');
@@ -298,23 +378,33 @@ function collect(cu, ubus)
 		ignore: cu.get('dhcp', 'lan', 'ignore') == '1'
 	};
 
-	let mode = stored.mode != null && (stored.mode == 'router' || stored.mode == 'bypass' || stored.mode == 'repeater')
-		? stored.mode
-		: detect_mode(cu);
+	cu.load('wireless');
+	cu.foreach('wireless', 'wifi-iface', function(s) {
+		let name = s['.name'];
+
+		if (name == 'sbe1v1k_sta' || (wwan.ssid == null && cu.get('wireless', name, 'mode') == 'sta'))
+			wwan.ssid = cu.get('wireless', name, 'ssid');
+	});
 
 	return {
 		generated: time(),
-		mode,
+		mode: detect_mode(cu),
 		stored,
-		lan: { ...lan, runtime: iface_runtime(ubus, 'lan') },
-		wan: { ...wan, runtime: iface_runtime(ubus, 'wan') },
-		wwan: { ...wwan, runtime: iface_runtime(ubus, 'wwan'), ssid: null },
+		lan: { ...lan, runtime: iface_runtime(interfaces, 'lan') },
+		wan: { ...wan, runtime: iface_runtime(interfaces, 'wan') },
+		wwan: { ...wwan, runtime: iface_runtime(interfaces, uplink_name) },
 		relay,
 		dhcp_lan,
 		radios: collect_radios(cu),
 		pending: collect_pending(),
+		result: collect_result(),
 		backup: stat(BACKUP_DIR) != null
 	};
+}
+
+function json_error(message)
+{
+	http.write_json({ ok: false, error: message });
 }
 
 return {
@@ -324,23 +414,18 @@ return {
 		let ubus = connect();
 
 		cu.load(CFG);
-
-		let data = collect(cu, ubus);
-
-		// enrich wwan with the sta ssid from wireless config
-		cu.load('wireless');
-		cu.foreach('wireless', 'wifi-iface', function(s) {
-			if (cu.get('wireless', s['.name'], 'mode') == 'sta')
-				data.wwan.ssid = cu.get('wireless', s['.name'], 'ssid');
-		});
-
 		http.prepare_content('application/json');
-		http.write_json(data);
+		http.write_json(collect(cu, ubus));
 	},
 
 	action_apply: function()
 	{
 		http.prepare_content('application/json');
+
+		if (collect_pending().active) {
+			json_error('已有网络切换正在进行，请先确认或回滚');
+			return;
+		}
 
 		let mode = http.formvalue('mode');
 		let lan_ip = http.formvalue('lan_ip');
@@ -352,62 +437,74 @@ return {
 		let encryption = http.formvalue('encryption');
 		let band = http.formvalue('band');
 		let timeout = int(http.formvalue('timeout') ?? '');
+		let cu = cursor();
 
-		if (type(timeout) != 'int' || timeout < 30)
+		cu.load(CFG);
+		if (type(timeout) != 'int' || timeout < 30 || timeout > MAX_TIMEOUT)
 			timeout = DEFAULT_TIMEOUT;
 
 		if (!array_contains(MODES, mode)) {
-			http.write_json({ ok: false, error: '无效的网络模式' });
+			json_error('无效的网络模式');
 			return;
 		}
 
-		if (!valid_ip(lan_ip)) {
-			http.write_json({ ok: false, error: 'LAN IP 地址格式不正确' });
-			return;
-		}
-
-		if (!valid_prefix(lan_prefix)) {
-			http.write_json({ ok: false, error: '子网前缀长度无效（8-30）' });
+		if (!valid_prefix(lan_prefix) || !valid_host_ip(lan_ip, lan_prefix)) {
+			json_error('LAN IP 必须是所选子网中的有效主机地址');
 			return;
 		}
 
 		if (mode == 'bypass') {
-			if (!valid_ip(gateway)) {
-				http.write_json({ ok: false, error: '请填写主路由的网关 IP' });
+			if (!valid_host_ip(gateway, lan_prefix) || !same_subnet(lan_ip, gateway, lan_prefix) || gateway == lan_ip) {
+				json_error('主路由网关必须与 LAN IP 同网段且不能相同');
 				return;
 			}
 
-			if (dns != null && dns != '' && !valid_ip(dns)) {
-				http.write_json({ ok: false, error: 'DNS 地址格式不正确' });
+			if (dns != null && dns != '' && !valid_unicast_ip(dns)) {
+				json_error('DNS 地址格式不正确');
 				return;
 			}
 		}
 
 		if (mode == 'repeater') {
-			if (ssid == null || ssid == '') {
-				http.write_json({ ok: false, error: '请填写要连接的上游 Wi-Fi SSID' });
+			if (type(ssid) != 'string' || length(ssid) < 1 || length(ssid) > 32) {
+				json_error('上游 Wi-Fi SSID 必须为 1–32 字节');
 				return;
 			}
 
-			if (!valid_band(band)) {
-				http.write_json({ ok: false, error: '请选择用于中继的频段' });
+			if (!array_contains(BANDS, band) || !array_contains(ENCS, encryption)) {
+				json_error('无线频段或加密方式无效');
 				return;
 			}
 
-			if (!valid_enc(encryption)) {
-				http.write_json({ ok: false, error: '加密方式无效' });
+			if (band == '6g' && encryption != 'sae' && encryption != 'owe') {
+				json_error('6 GHz 上行仅支持 WPA3-SAE 或 OWE');
 				return;
 			}
 
-			if (encryption != 'none' && (key == null || length(key) < 8)) {
-				http.write_json({ ok: false, error: 'Wi-Fi 密码至少需要 8 个字符' });
+			if ((key == null || key == '') && encryption != 'none' && encryption != 'owe')
+				key = cu.get(CFG, 'settings', 'key');
+
+			if (!valid_key(encryption, key)) {
+				json_error('Wi-Fi 密码无效：应为 8–63 字符，WPA2 也可使用 64 位十六进制 PSK');
 				return;
 			}
+
+			if (encryption == 'none' || encryption == 'owe')
+				key = '';
 		}
 
-		let cu = cursor();
+		system('mkdir -p ' + STATE_DIR);
+		if (system('mkdir ' + SUBMIT_LOCK + ' 2>/dev/null') != 0) {
+			json_error('另一个网络切换请求正在提交，请稍后重试');
+			return;
+		}
 
-		cu.load(CFG);
+		if (collect_pending().active) {
+			system('rmdir ' + SUBMIT_LOCK + ' 2>/dev/null');
+			json_error('已有网络切换正在进行，请先确认或回滚');
+			return;
+		}
+
 		cu.set(CFG, 'settings', 'mode', mode);
 		cu.set(CFG, 'settings', 'lan_ip', lan_ip);
 		cu.set(CFG, 'settings', 'lan_prefix', lan_prefix);
@@ -427,35 +524,66 @@ return {
 
 		cu.save(CFG);
 		cu.commit(CFG);
+		system('chmod 600 /etc/config/' + CFG + ' 2>/dev/null');
 
-		// Cancel any previous rollback and arm the pending marker immediately,
-		// so confirm/revert work even before the apply script starts.
-		run('rm -f ' + PENDING + '; [ -f ' + WATCHDOG_PID + ' ] && kill $(cat ' + WATCHDOG_PID + ') 2>/dev/null; rm -f ' + WATCHDOG_PID);
-		run('echo "mode=' + mode + ' timeout=' + timeout + ' started=' + time() + '" > ' + PENDING);
+		let request_id = trim(run('cat /proc/sys/kernel/random/uuid 2>/dev/null') ?? '');
 
-		// Run the apply script detached one second later so the HTTP
-		// response reaches the browser before the network is restarted.
-		system('(sleep 1; setsid ' + APPLY_SCRIPT + ' >/dev/null 2>&1 &)');
+		if (!valid_request_id(request_id))
+			request_id = sprintf('%x-%x', time(), time() % 65535);
 
-		http.write_json({ ok: true, timeout });
+		system('rm -f ' + RESULT);
+
+		let pending = 'request_id=' + request_id + '\n' +
+			'mode=' + mode + '\n' +
+			'timeout=' + timeout + '\n' +
+			'started=0\nphase=queued\n';
+
+		if (!write_text(PENDING, pending)) {
+			system('rmdir ' + SUBMIT_LOCK + ' 2>/dev/null');
+			json_error('无法创建网络切换状态');
+			return;
+		}
+
+		let rc = system('(sleep 2; setsid ' + APPLY_SCRIPT + ' ' + request_id + ' >/dev/null 2>&1) &');
+
+		if (rc != 0) {
+			system('rm -f ' + PENDING);
+			system('rmdir ' + SUBMIT_LOCK + ' 2>/dev/null');
+			json_error('无法启动网络切换任务');
+			return;
+		}
+
+		system('rmdir ' + SUBMIT_LOCK + ' 2>/dev/null');
+		http.write_json({ ok: true, timeout, request_id });
 	},
 
 	action_confirm: function()
 	{
 		http.prepare_content('application/json');
+		let request_id = http.formvalue('request_id');
+		let pending = collect_pending();
 
-		if (read_text(PENDING) == null) {
+		if (!pending.active) {
 			http.write_json({ ok: true, already: true });
 			return;
 		}
 
-		let pid = read_text(WATCHDOG_PID);
+		if (!valid_request_id(request_id) || request_id != pending.request_id) {
+			json_error('请求已过期，请刷新页面');
+			return;
+		}
 
-		if (pid != null)
-			run('kill ' + trim(pid) + ' 2>/dev/null');
+		if (pending.phase != 'applied') {
+			json_error('配置尚未完成应用，暂时不能确认');
+			return;
+		}
 
-		run('rm -f ' + PENDING + ' ' + WATCHDOG_PID);
-		run('rm -rf ' + BACKUP_DIR);
+		let rc = system(RESTORE_SCRIPT + ' --confirm ' + request_id + ' >/dev/null 2>&1');
+
+		if (rc != 0) {
+			json_error('确认失败，回滚保护仍保持启用');
+			return;
+		}
 
 		http.write_json({ ok: true });
 	},
@@ -463,13 +591,25 @@ return {
 	action_revert: function()
 	{
 		http.prepare_content('application/json');
+		let request_id = http.formvalue('request_id');
+		let pending = collect_pending();
 
-		if (read_text(PENDING) == null) {
+		if (!pending.active) {
 			http.write_json({ ok: true, already: true });
 			return;
 		}
 
-		system('setsid ' + RESTORE_SCRIPT + ' >/dev/null 2>&1 &');
+		if (!valid_request_id(request_id) || request_id != pending.request_id) {
+			json_error('请求已过期，请刷新页面');
+			return;
+		}
+
+		let rc = system('(setsid ' + RESTORE_SCRIPT + ' ' + request_id + ' manual >/dev/null 2>&1) &');
+
+		if (rc != 0) {
+			json_error('无法启动回滚任务');
+			return;
+		}
 
 		http.write_json({ ok: true });
 	}

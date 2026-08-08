@@ -1,52 +1,165 @@
 #!/bin/sh
-# /usr/sbin/sbe1v1k-netmode-restore
-#
-# Rolls /etc/config/{network,wireless,dhcp} back to the snapshot taken by
-# sbe1v1k-netmode-apply and restarts the affected services. Called either by
-# the automatic watchdog or manually from the LuCI page.
-
-. /lib/functions.sh
+# Confirm or restore an SBE1V1K network-mode request under an operation lock.
 
 BACKUP_DIR=/etc/sbe1v1k-netmode-backup
 STATE_DIR=/tmp/sbe1v1k-netmode
 PENDING=$STATE_DIR/pending
 WATCHDOG_PID=$STATE_DIR/watchdog.pid
+RESULT=$STATE_DIR/result
+LOCK_DIR=$STATE_DIR/lock
 LOG=/tmp/sbe1v1k-netmode-apply.log
 
-log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"; }
+if [ "${1:-}" = --confirm ]; then
+	ACTION=confirm
+	REQUEST_ID=${2:-}
+	SOURCE=manual
+else
+	ACTION=restore
+	REQUEST_ID=${1:-}
+	SOURCE=${2:-manual}
+fi
 
-main() {
-	if [ ! -d "$BACKUP_DIR" ]; then
-		rm -f "$PENDING"
-		log "restore requested but no snapshot found; nothing to do"
-		exit 0
+LOCK_HELD=0
+
+mkdir -p "$STATE_DIR"
+
+log() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG"; }
+
+valid_id() {
+	[ -n "$1" ] && case "$1" in *[!0-9a-fA-F-]*) return 1;; esac
+}
+
+pending_field() {
+	sed -n "s/^$1=//p" "$PENDING" 2>/dev/null | head -n 1
+}
+
+write_result() {
+	local status="$1" message="$2" tmp="$RESULT.tmp.$$"
+	message=$(printf '%s' "$message" | tr '\r\n' '  ')
+	{
+		printf 'request_id=%s\n' "$REQUEST_ID"
+		printf 'status=%s\n' "$status"
+		printf 'updated=%s\n' "$(date +%s)"
+		printf 'message=%s\n' "$message"
+	} > "$tmp" && mv -f "$tmp" "$RESULT"
+}
+
+release_lock() {
+	if [ "$LOCK_HELD" = 1 ]; then
+		rmdir "$LOCK_DIR" 2>/dev/null
+		LOCK_HELD=0
 	fi
+}
 
-	# Stop the watchdog (but not ourself when invoked by it).
-	if [ -f "$WATCHDOG_PID" ]; then
-		local pid
-		pid=$(cat "$WATCHDOG_PID" 2>/dev/null)
-		[ -n "$pid" ] && [ "$pid" != "$$" ] && kill "$pid" 2>/dev/null
-		rm -f "$WATCHDOG_PID"
-	fi
+acquire_lock() {
+	local waited=0
+	while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+		waited=$((waited + 1))
+		[ "$waited" -lt 30 ] || return 1
+		sleep 1
+	done
+	LOCK_HELD=1
+	trap release_lock 0
+	trap 'release_lock; exit 1' HUP INT TERM
+}
 
-	log "restoring previous network configuration"
-	for f in network wireless dhcp; do
+kill_watchdog() {
+	local pid
+	[ -f "$WATCHDOG_PID" ] || return 0
+	pid=$(cat "$WATCHDOG_PID" 2>/dev/null)
+	case "$pid" in ''|*[!0-9]*) ;; *) [ "$pid" = "$$" ] || kill "$pid" 2>/dev/null ;; esac
+	rm -f "$WATCHDOG_PID"
+}
+
+restart_services() {
+	local rc=0
+	/etc/init.d/network restart >> "$LOG" 2>&1 || rc=1
+	/etc/init.d/dnsmasq restart >> "$LOG" 2>&1 || rc=1
+	/etc/init.d/odhcpd restart >> "$LOG" 2>&1 || rc=1
+	/etc/init.d/relayd restart >> "$LOG" 2>&1 || rc=1
+	/etc/init.d/firewall reload >> "$LOG" 2>&1 || rc=1
+	return "$rc"
+}
+
+confirm_request() {
+	local phase
+	phase=$(pending_field phase)
+	[ "$phase" = applied ] || { log "confirmation rejected in phase=$phase"; return 2; }
+	[ -d "$BACKUP_DIR" ] || { log "confirmation rejected: snapshot missing"; return 2; }
+	kill_watchdog
+	rm -f "$PENDING"
+	rm -rf "$BACKUP_DIR"
+	write_result confirmed "configuration confirmed"
+	log "request=$REQUEST_ID confirmed"
+}
+
+restore_request() {
+	local f rc=0 mode timeout started phase tmp="$PENDING.tmp.$$"
+	phase=$(pending_field phase)
+	[ -d "$BACKUP_DIR" ] || {
+		if [ "$phase" = queued ]; then
+			rm -f "$PENDING" "$WATCHDOG_PID"
+			write_result reverted "queued request cancelled"
+			log "request=$REQUEST_ID cancelled before apply"
+			return 0
+		fi
+		rm -f "$PENDING" "$WATCHDOG_PID"
+		write_result error "rollback snapshot is missing"
+		log "ERROR: rollback requested without a snapshot"
+		return 1
+	}
+
+	mode=$(pending_field mode)
+	timeout=$(pending_field timeout)
+	started=$(pending_field started)
+	{
+		printf 'request_id=%s\nmode=%s\ntimeout=%s\nstarted=%s\nphase=reverting\n' \
+			"$REQUEST_ID" "$mode" "$timeout" "$started"
+	} > "$tmp" && mv -f "$tmp" "$PENDING"
+
+	kill_watchdog
+	log "restoring request=$REQUEST_ID source=$SOURCE"
+	for f in network wireless dhcp firewall; do
 		if [ -f "$BACKUP_DIR/$f" ]; then
-			cp -a "$BACKUP_DIR/$f" "/etc/config/$f"
-			log "restored /etc/config/$f"
+			cp -a "$BACKUP_DIR/$f" "/etc/config/$f" || rc=1
+		else
+			rc=1
 		fi
 	done
+	uci -q revert network
+	uci -q revert wireless
+	uci -q revert dhcp
+	uci -q revert firewall
+	restart_services || rc=1
 
-	/etc/init.d/network restart >> "$LOG" 2>&1
-	/etc/init.d/dnsmasq restart >> "$LOG" 2>&1
-	/etc/init.d/odhcpd restart >> "$LOG" 2>&1
-	/etc/init.d/relayd restart >> "$LOG" 2>&1
-	/etc/init.d/firewall reload >> "$LOG" 2>&1
+	if [ "$rc" = 0 ]; then
+		rm -f "$PENDING"
+		rm -rf "$BACKUP_DIR"
+		write_result reverted "previous configuration restored"
+		log "request=$REQUEST_ID restore complete"
+	else
+		write_result error "rollback was incomplete; inspect $LOG"
+		log "ERROR: request=$REQUEST_ID restore incomplete"
+	fi
 
-	rm -f "$PENDING"
-	log "restore complete"
-	exit 0
+	return "$rc"
+}
+
+main() {
+	local current
+	valid_id "$REQUEST_ID" || { log "ERROR: invalid request id"; exit 1; }
+	acquire_lock || { log "ERROR: timed out waiting for operation lock"; exit 1; }
+	current=$(pending_field request_id)
+	if [ -z "$current" ]; then
+		log "request=$REQUEST_ID is already complete"
+		exit 0
+	fi
+	[ "$current" = "$REQUEST_ID" ] || { log "ERROR: stale request $REQUEST_ID"; exit 1; }
+
+	case "$ACTION" in
+		confirm) confirm_request ;;
+		restore) restore_request ;;
+	esac
 }
 
 main "$@"

@@ -9,7 +9,7 @@
 import { open, glob, stat, popen, basename } from 'fs';
 import { cursor } from 'uci';
 
-const MAX_READ = 65536;
+const MAX_READ = 262144;
 
 function read_text(path, maxlen)
 {
@@ -53,6 +53,9 @@ function pick_int(text, re)
  */
 function parse_counter_stats(text)
 {
+	if (text == null)
+		return null;
+
 	let out = { total: 0, nonzero: [] };
 
 	for (let line in split(text ?? '', '\n')) {
@@ -68,11 +71,14 @@ function parse_counter_stats(text)
 		}
 	}
 
-	return out;
+	return out.total > 0 ? out : null;
 }
 
 function parse_qm(text)
 {
+	if (text == null)
+		return null;
+
 	let out = { total: { tx: 0, pend: 0, drop: 0 }, queues: [] };
 
 	for (let m in (match(text ?? '', /(\d+)\/(\d+)\/(\d+)\(queue=([0-9a-fA-F]+)\)/g) ?? [])) {
@@ -89,6 +95,9 @@ function parse_qm(text)
 
 function parse_cpu_code(text)
 {
+	if (text == null)
+		return null;
+
 	let out = [];
 
 	for (let m in (match(text ?? '', /(\d+)\(port=([0-9a-fA-F]+)\),dropcode:(\d+)/g) ?? []))
@@ -99,6 +108,9 @@ function parse_cpu_code(text)
 
 function parse_port_stats(text)
 {
+	if (text == null)
+		return null;
+
 	let out = { ports: [], vports: [] };
 
 	for (let line in split(text ?? '', '\n')) {
@@ -123,6 +135,9 @@ function parse_port_stats(text)
 
 function parse_direct_switch(text)
 {
+	if (text == null)
+		return null;
+
 	let out = { flow_enqueue_map: [], port_qmaps: [], nodes: [] };
 
 	for (let line in split(text ?? '', '\n')) {
@@ -142,6 +157,9 @@ function parse_direct_switch(text)
 				queues: m[5],
 				enqueue_vp: int(m[6]),
 				profile: int(m[7]),
+				queue_profile: pick_int(line, /queue_profile=(\d+)/),
+				ppe2tcl_pending: pick_int(line, /ppe2tcl=\d+\/\d+\/(\d+)\/\d+/),
+				reo2ppe_pending: pick_int(line, /reo2ppe=\d+\/\d+\/(\d+)\/\d+/),
 				start: pick_int(line, /start=(\d+)/),
 				stop: pick_int(line, /stop=(\d+)/)
 			});
@@ -176,7 +194,10 @@ function parse_ds_summary(text)
 		tx_complete: null,
 		rx_complete: null,
 		rx_requeue: null,
-		rx_drop: null
+		rx_drop: null,
+		ppe2tcl_index: null,
+		reo2ppe_index: null,
+		ring_available: false
 	};
 	let m;
 
@@ -188,6 +209,16 @@ function parse_ds_summary(text)
 	if ((m = match(text, /reo2ppe_updates:\s*prod=(\d+) cons=(\d+)/)) != null) {
 		out.reo2ppe_prod = int(m[1]);
 		out.reo2ppe_cons = int(m[2]);
+	}
+
+	if ((m = match(text, /ppe2tcl_index:\s*prod=(\d+) cons=(\d+) pending=(\d+)/)) != null) {
+		out.ppe2tcl_index = { prod: int(m[1]), cons: int(m[2]), pending: int(m[3]) };
+		out.ring_available = true;
+	}
+
+	if ((m = match(text, /reo2ppe_index:\s*prod=(\d+) cons=(\d+) pending=(\d+)/)) != null) {
+		out.reo2ppe_index = { prod: int(m[1]), cons: int(m[2]), pending: int(m[3]) };
+		out.ring_available = true;
 	}
 
 	out.tx_alloc = pick_int(text, /tx_alloc:\s*(\d+)/);
@@ -350,10 +381,11 @@ function collect()
 
 	if (eip_node != null) {
 		let status = read_text(eip_node + '/status');
+		let clean_status = status != null ? trim(split(status, '\u0000')[0]) : 'okay';
 
 		eip.dt = {
 			node: eip_node,
-			status: status != null ? status : 'okay',
+			status: clean_status != '' ? clean_status : 'okay',
 			inline_enabled: stat(eip_node + '/qcom,inline-enabled') ? 'yes' : 'no',
 			outer_offload: stat(eip_node + '/qcom,outer-offload') ? 'yes' : 'no',
 			inner_offload: stat(eip_node + '/qcom,inner-offload') ? 'yes' : 'no'
@@ -373,6 +405,7 @@ function collect()
 
 	eip.firmware = firmware;
 	eip.algorithms = eip_algorithms;
+	eip.debugfs = stat('/sys/kernel/debug/qca-nss-eip/eip197') != null;
 	eip.interrupts = parse_interrupts(run('grep -Ei "eip.*ring|ring.*eip" /proc/interrupts'));
 	eip.flow_table = parse_flow_table(read_text('/sys/kernel/debug/qca-nss-eip/eip197/eip_flow_table'));
 
@@ -433,7 +466,7 @@ function collect()
 			flow_offloading: cu.get_first('firewall', 'defaults', 'flow_offloading'),
 			flow_offloading_hw: cu.get_first('firewall', 'defaults', 'flow_offloading_hw')
 		},
-		modules: parse_modules(run('grep -E "(^| )(qcom_ppe|qca_nss_eip|nf_flow_table|nft_flow_offload|nft_flow_table) " /proc/modules')),
+		modules: parse_modules(run('grep -E "(^| )(qcom_ppe|qca_nss_eip[^ ]*|nf_flow_table|nft_flow_offload|nft_flow_table) " /proc/modules')),
 		abi: {
 			qcom_ppe_ds_start: ks != null && match(ks, /qcom_ppe_ds_start/) != null,
 			qcom_ppe_ds_vp_alloc: ks != null && match(ks, /qcom_ppe_ds_vp_alloc/) != null,

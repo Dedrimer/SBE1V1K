@@ -2,10 +2,10 @@
 	"luci-app-sbe1v1k-netmode": {
 		"description": "Grant access to SBE1V1K network mode switching (router / bypass / repeater)",
 		"read": {
-			"uci": [ "network", "wireless", "dhcp", "sbe1v1k_netmode" ]
+			"uci": [ "network", "wireless", "dhcp", "firewall", "sbe1v1k_netmode" ]
 		},
 		"write": {
-			"uci": [ "network", "wireless", "dhcp", "sbe1v1k_netmode" ]
+			"uci": [ "network", "wireless", "dhcp", "firewall", "sbe1v1k_netmode" ]
 		}
 	}
 }

@@ -2,7 +2,7 @@
 	"luci-app-sbe1v1k-diag": {
 		"description": "Grant access to SBE1V1K hardware diagnostics",
 		"read": {
-			"uci": [ "system", "firewall" ]
+			"uci": [ "firewall" ]
 		}
 	}
 }

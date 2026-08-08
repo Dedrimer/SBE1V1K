@@ -37,7 +37,8 @@ define Device/askey_sbe1v1k
 		luci-ssl luci-i18n-base-zh_Hans luci-i18n-firewall-zh_Hans \
 		luci-i18n-package-manager-zh_Hans curl nano htop tcpdump ethtool-full \
 		iperf3 bind-dig pciutils usbutils qca-nss-fw-eip \
-		kmod-qca-nss-eip kmod-qca-nss-eip-crypto kmod-qca-nss-eip-ipsec luci-app-sbe1v1k-diag
+		kmod-qca-nss-eip kmod-qca-nss-eip-crypto kmod-qca-nss-eip-ipsec \
+		luci-app-sbe1v1k-diag luci-app-sbe1v1k-netmode
 	IMAGE/recovery.bin := append-kernel | pad-to $$$$(KERNEL_SIZE) | append-rootfs | \
 		pad-rootfs | check-size $$$$(IMAGE_SIZE) | append-metadata
 endef
