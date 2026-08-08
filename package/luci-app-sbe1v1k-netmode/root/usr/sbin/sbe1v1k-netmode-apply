@@ -12,7 +12,8 @@ RESULT=$STATE_DIR/result
 LOCK_DIR=$STATE_DIR/lock
 RESTORE_SCRIPT=/usr/sbin/sbe1v1k-netmode-restore
 LOG=/tmp/sbe1v1k-netmode-apply.log
-LAN_PORTS="lan1 lan2 lan3"
+LAN_PORTS="eth0 eth1 eth2"
+WAN_PORT=eth3
 UPLINK=sbe1v1k_wwan
 RELAY=sbe1v1k_relay
 REQUEST_ID=${1:-}
@@ -188,7 +189,7 @@ ensure_brlan() {
 ensure_wan() {
 	[ -n "$(uci_get network.wan)" ] && return 0
 	uci -q set network.wan=interface || return 1
-	uci -q set network.wan.device=wan || return 1
+	uci -q set "network.wan.device=$WAN_PORT" || return 1
 	uci -q set network.wan.proto=dhcp || return 1
 	log "created wan interface"
 }

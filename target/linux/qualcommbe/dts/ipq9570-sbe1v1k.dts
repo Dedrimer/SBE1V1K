@@ -403,7 +403,7 @@
 			phy-handle = <&qca8075_18>;
 			pcs-handle = <&pcs0_ch2>;
 			managed = "in-band-status";
-			label = "lan2";
+			label = "eth0";
 
 			nvmem-cells = <&ethaddr 1>;
 			nvmem-cell-names = "mac-address";
@@ -425,7 +425,7 @@
 			phy-handle = <&qca8075_19>;
 			pcs-handle = <&pcs0_ch3>;
 			managed = "in-band-status";
-			label = "lan3";
+			label = "eth1";
 
 			nvmem-cells = <&ethaddr 1>;
 			nvmem-cell-names = "mac-address";
@@ -447,7 +447,7 @@
 			phy-handle = <&qca8081_28>;
 			pcs-handle = <&pcs1_ch0>;
 			managed = "in-band-status";
-			label = "lan1";
+			label = "eth2";
 
 			nvmem-cells = <&ethaddr 1>;
 			nvmem-cell-names = "mac-address";
@@ -469,7 +469,7 @@
 			phy-handle = <&rtl8261be_0>;
 			pcs-handle = <&pcs2_ch0>;
 			managed = "in-band-status";
-			label = "wan";
+			label = "eth3";
 
 			nvmem-cells = <&ethaddr 0>;
 			nvmem-cell-names = "mac-address";

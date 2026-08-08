@@ -23,6 +23,8 @@ define Device/askey_sbe1v1k
 	DEVICE_ALT0_MODEL := RTQ7300T
 	DEVICE_ALT1_VENDOR := Spectrum
 	DEVICE_ALT1_MODEL := SBE1V1K
+	DEVICE_COMPAT_VERSION := 1.1
+	DEVICE_COMPAT_MESSAGE := Ethernet devices were renamed to eth0-eth3
 	DEVICE_DTS_CONFIG := config@rtq7300t-rev0
 	KERNEL_LOADADDR := 0x42080000
 	SOC := ipq9570

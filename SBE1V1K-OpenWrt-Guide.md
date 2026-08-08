@@ -19,9 +19,9 @@ SBE1V1K 已经具备可用的 OpenWrt 设备支持代码，但还不能称为“
 |---|---|
 | SoC | Qualcomm IPQ9570；DTS compatible 为 `qcom,ipq9574`，两种称呼来自同一目标代码 |
 | RAM / 存储 | Micron 2 GB / 8 GB eMMC |
-| 10G | RTL8261BE，设备树与固件已包含 |
-| 2.5G | QCA8081，已定义 |
-| 1G | QCA8075 × 2，已定义 |
+| 10G | `eth3`（WAN），PPE 端口 6，RTL8261BE，设备树与固件已包含 |
+| 2.5G | `eth2`（LAN），PPE 端口 5，QCA8081，已定义 |
+| 1G | `eth0` / `eth1`（LAN），PPE 端口 3 / 4，QCA8075 × 2，已定义 |
 | 2.4 GHz | QCN6214，4×4 |
 | 5 / 6 GHz | QCN6274，分别 4×4；共用单 wiphy、多 radio 结构，需要本项目 0001/0002 补丁 |
 | 风扇 | PWM 风扇；修复 PR #23916 已合并并包含在固定基线中 |

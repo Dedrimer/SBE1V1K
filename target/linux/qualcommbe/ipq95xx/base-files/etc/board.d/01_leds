@@ -11,21 +11,21 @@ board=$(board_name)
 
 case "$board" in
 askey,sbe1v1k)
-	# QCA8081 (lan1, 2.5G) port LEDs, speed-coded via the netdev trigger
+	# QCA8081 (eth2, 2.5G LAN) port LEDs, speed-coded via the netdev trigger
 	#   2.5G: green on + activity blink
 	#   1G  : green + yellow on, both blink on activity
 	#   100M: yellow on + activity blink
-	ucidef_set_led_netdev "lan1_green" "lan1:green" \
-		"90000.mdio-1:1c:green:lan" "lan1" "link_2500 link_1000 tx rx"
-	ucidef_set_led_netdev "lan1_yellow" "lan1:yellow" \
-		"90000.mdio-1:1c:yellow:lan" "lan1" "link_1000 link_100 tx rx"
-	# RTL8261BE (wan, 10G) port LEDs, hardware-offloaded likewise:
+	ucidef_set_led_netdev "lan_2g5_green" "LAN 2.5G: green" \
+		"90000.mdio-1:1c:green:lan" "eth2" "link_2500 link_1000 tx rx"
+	ucidef_set_led_netdev "lan_2g5_yellow" "LAN 2.5G: yellow" \
+		"90000.mdio-1:1c:yellow:lan" "eth2" "link_1000 link_100 tx rx"
+	# RTL8261BE (eth3, 10G WAN) port LEDs, hardware-offloaded likewise:
 	#   green: on at 10G/5G/2.5G, blinks off with activity
 	#   amber: on at 1G/100M, blinks off with activity
-	ucidef_set_led_netdev "wan_green" "wan:green" \
-		"90000.mdio-1:00:green:wan" "wan" "link_10000 link_5000 link_2500 tx rx"
-	ucidef_set_led_netdev "wan_amber" "wan:amber" \
-		"90000.mdio-1:00:amber:wan" "wan" "link_1000 link_100 tx rx"
+	ucidef_set_led_netdev "wan_green" "WAN: green" \
+		"90000.mdio-1:00:green:wan" "eth3" "link_10000 link_5000 link_2500 tx rx"
+	ucidef_set_led_netdev "wan_amber" "WAN: amber" \
+		"90000.mdio-1:00:amber:wan" "eth3" "link_1000 link_100 tx rx"
 	;;
 esac
 

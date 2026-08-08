@@ -101,6 +101,23 @@ out/targets/qualcommbe/ipq95xx/openwrt-qualcommbe-ipq95xx-askey_sbe1v1k-squashfs
 
 本次固件编译耗时保存在 `out/build-time.txt`。
 
+## 有线端口映射
+
+设备树按 PPE 端口顺序将四个底层网卡连续命名为 `eth0`–`eth3`，LAN/WAN 角色由
+`02_network` 分配：
+
+| 底层网卡 | 网络角色 | PPE 端口 | PHY | 最高速率 |
+| --- | --- | ---: | --- | ---: |
+| `eth0` | LAN | 3 | QCA8075 | 1G |
+| `eth1` | LAN | 4 | QCA8075 | 1G |
+| `eth2` | LAN | 5 | QCA8081 | 2.5G |
+| `eth3` | WAN | 6 | RTL8261BE | 10G |
+
+旧版设备树直接使用了 `lan2`、`lan3`、`lan1`、`wan`。由于保留配置升级会令按单口设置的
+VLAN、SQM 或 LED 等配置失效，本版已提升设备兼容版本；升级时应备份后重新生成配置，或
+手动按“旧 `lan2` → `eth0`、旧 `lan3` → `eth1`、旧 `lan1` → `eth2`、旧 `wan` →
+`eth3`”迁移所有按底层网卡配置的项目。
+
 ## 状态 LED 与硬件监控
 
 - 状态 LED:`green:status` 使用反转的 kernel heartbeat 触发(默认常亮,系统活动时闪烁),

@@ -44,7 +44,7 @@ Do not flash the persistent image before the initramfs image has booted and
 the following have been confirmed on the exact unit:
 
 1. eMMC partitions and ART calibration data are readable.
-2. LAN1/LAN2/LAN3 and WAN link and pass traffic at their expected speeds.
+2. eth0/eth1 (1G LAN), eth2 (2.5G LAN), and eth3 (10G WAN) link and pass traffic.
 3. 2.4 GHz, 5 GHz and 6 GHz radios are each detected on ten cold boots.
 4. The fan changes speed with thermal state and never remains stopped hot.
 5. `sysupgrade -T` accepts only the matching, complete image.
