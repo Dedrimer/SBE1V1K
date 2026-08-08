@@ -27,6 +27,13 @@ function read_text(path, maxlen)
 	return data;
 }
 
+function read_int(path)
+{
+	let data = read_text(path, 64);
+
+	return data != null ? int(trim(data)) : null;
+}
+
 function run(cmd)
 {
 	let fd = popen(cmd);
@@ -332,6 +339,83 @@ function find_eip_node()
 	return null;
 }
 
+/*
+ * The SBE1V1K fan is already managed by the kernel thermal framework.
+ * Keep this endpoint read-only: a userspace PWM loop would race the
+ * step_wise governor and could defeat the DT hot/critical protection.
+ */
+function collect_fan()
+{
+	let out = {
+		present: false,
+		module_loaded: stat('/sys/module/pwm_fan') != null,
+		zone: null,
+		zone_type: null,
+		temperature: null,
+		policy: null,
+		cooling_state: null,
+		max_state: null,
+		pwm: null,
+		pwm_path: null,
+		levels: [ 36, 72, 128, 255 ],
+		trips: []
+	};
+
+	for (let zone in (glob('/sys/class/thermal/thermal_zone*') ?? [])) {
+		let linked = false;
+		let cooling = null;
+
+		for (let cdev in (glob(zone + '/cdev*') ?? [])) {
+			let type = read_text(cdev + '/type', 64);
+
+			if (type != null && trim(type) == 'pwm-fan') {
+				linked = true;
+				cooling = cdev;
+				break;
+			}
+		}
+
+		if (!linked)
+			continue;
+
+		out.present = true;
+		out.zone = basename(zone);
+		out.zone_type = trim(read_text(zone + '/type', 128) ?? '');
+		out.temperature = read_int(zone + '/temp');
+		out.policy = trim(read_text(zone + '/policy', 64) ?? '');
+		out.cooling_state = read_int(cooling + '/cur_state');
+		out.max_state = read_int(cooling + '/max_state');
+
+		for (let i = 0; i < 32; i++) {
+			let temp_path = zone + '/trip_point_' + i + '_temp';
+
+			if (stat(temp_path) == null)
+				break;
+
+			push(out.trips, {
+				index: i,
+				type: trim(read_text(zone + '/trip_point_' + i + '_type', 64) ?? ''),
+				temperature: read_int(temp_path),
+				hysteresis: read_int(zone + '/trip_point_' + i + '_hyst')
+			});
+		}
+
+		break;
+	}
+
+	for (let hwmon in (glob('/sys/class/hwmon/hwmon*') ?? [])) {
+		let name = trim(read_text(hwmon + '/name', 64) ?? '');
+
+		if (name == 'pwmfan' && stat(hwmon + '/pwm1') != null) {
+			out.pwm_path = hwmon + '/pwm1';
+			out.pwm = read_int(out.pwm_path);
+			break;
+		}
+	}
+
+	return out;
+}
+
 function collect()
 {
 	let cu = cursor();
@@ -473,6 +557,7 @@ function collect()
 			qcom_ppe_ds_queue_start: ks != null && match(ks, /qcom_ppe_ds_queue_start/) != null,
 			qcom_ppe_eip_provider: ks != null && match(ks, /qcom_ppe_eip_provider_register/) != null
 		},
+		fan: collect_fan(),
 		ppe,
 		eip
 	};

@@ -30,6 +30,20 @@ SBE1V1K 已经具备可用的 OpenWrt 设备支持代码，但还不能称为“
 | Bootloader | 原厂 U-Boot 1.0.9；可选第三方 HTTP 二阶段 chainloader。首次进入原厂 shell 仍需串口 + eMMC glitch |
 | PPE/NSS 加速 | 未支持 |
 
+风扇由设备树中的 `pwm-fan` cooling device 和内核 `step_wise` thermal governor 直接管理，不依赖用户态服务。PWM 通道 3 的周期为 40,000 ns（约 25 kHz），当前温控曲线如下：
+
+| 温度 | 冷却档位 | PWM 值 |
+| --- | ---: | ---: |
+| 低于 40°C | 内核空闲状态 | 由 thermal governor 决定 |
+| 40°C | 0 | 36 / 255 |
+| 50°C | 1 | 72 / 255 |
+| 65°C | 2 | 128 / 255 |
+| 80°C | 3 | 255 / 255 |
+| 100°C | hot | 保持最高冷却档位 |
+| 110°C | critical | 内核临界过热保护 |
+
+OpenWrt 官方 `packages`/`luci` feed 没有适配该内核温控模型的风扇控制 LuCI 插件。常见第三方 `luci-app-fancontrol` 会直接抢写 PWM，或错误地重写 hot/critical trip，因此本项目不引入用户态调速守护程序。固件自带的“SBE1V1K 诊断”页会只读显示当前温度、thermal policy、冷却档位、PWM 占空比和全部 trip；设备没有提供 TACH hwmon 节点，无法读取真实 RPM。
+
 ## 3. 源码的可追溯组成
 
 本仓库根目录就是完整 OpenWrt 工作树，不再需要源码生成脚本。`sources.lock` 是来源锁文件，相关 Git 线索明确分开：
@@ -291,6 +305,9 @@ ip -br link
 iw dev
 wifi status
 dmesg | grep -Ei 'ath12k|qca8081|rtl826|pwm|mmc|error|fail'
+cat /sys/class/thermal/thermal_zone*/policy
+cat /sys/class/thermal/cooling_device*/type
+cat /sys/class/thermal/cooling_device*/cur_state
 ```
 
 逐项验证：

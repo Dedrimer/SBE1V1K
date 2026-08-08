@@ -1,7 +1,7 @@
 include $(TOPDIR)/rules.mk
 
 LUCI_TITLE:=SBE1V1K Hardware Diagnostics
-LUCI_DESCRIPTION:=Reads PPE/EIP debugfs nodes, hardware counters and offload state on Askey SBE1V1K (IPQ9574)
+LUCI_DESCRIPTION:=Reads thermal/fan state, PPE/EIP debugfs nodes, hardware counters and offload state on Askey SBE1V1K (IPQ9574)
 LUCI_DEPENDS:=+luci-base
 LUCI_PKGARCH:=all
 
