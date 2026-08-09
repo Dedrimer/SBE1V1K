@@ -6,8 +6,9 @@
  * important counters and returns them as compact JSON.
  */
 
-import { open, glob, stat, popen, basename } from 'fs';
+import { open, glob, stat, popen, basename, realpath } from 'fs';
 import { cursor } from 'uci';
+import * as nl80211 from 'nl80211';
 
 const MAX_READ = 262144;
 
@@ -339,6 +340,184 @@ function find_eip_node()
 	return null;
 }
 
+const ETHERNET_SENSORS = {
+	eth2: { id: 'eth2', label: '2.5G LAN' },
+	eth3: { id: 'eth3', label: '10G WAN' }
+};
+
+const WIRELESS_SENSORS = {
+	'2g': { id: 'wifi-2g', label: '2.4 GHz' },
+	'5g': { id: 'wifi-5g', label: '5 GHz' },
+	'6g': { id: 'wifi-6g', label: '6 GHz' }
+};
+
+function add_sensor(sensors, sensor)
+{
+	for (let item in sensors)
+		if (item.id == sensor.id)
+			return;
+
+	push(sensors, sensor);
+}
+
+function band_for_ranges(ranges)
+{
+	for (let range in (ranges ?? [])) {
+		if (range.end >= 2400000 && range.start <= 2500000)
+			return '2g';
+		if (range.end >= 4900000 && range.start <= 5924999)
+			return '5g';
+		if (range.end >= 5925000 && range.start <= 7125000)
+			return '6g';
+	}
+
+	return null;
+}
+
+/*
+ * Map the cfg80211 per-wiphy radio index to its currently advertised band.
+ * This is deliberately resolved at runtime: ath12k WSI device probe order is
+ * not a suitable ABI and must not be inferred from hwmonX numbering.
+ */
+function wireless_radio_bands()
+{
+	let out = {};
+	let phys = nl80211.request(
+		nl80211.const.NL80211_CMD_GET_WIPHY,
+		nl80211.const.NLM_F_DUMP,
+		{ split_wiphy_dump: true }
+	);
+
+	for (let phy in (phys ?? [])) {
+		if (type(phy?.wiphy_name) != 'string')
+			continue;
+
+		for (let radio in (phy.radios ?? [])) {
+			let band = band_for_ranges(radio.freq_ranges);
+
+			if (band != null)
+				out[phy.wiphy_name + ':' + int(radio.index)] = band;
+		}
+	}
+
+	return out;
+}
+
+function wiphy_for_device(device)
+{
+	if (device == null)
+		return null;
+
+	for (let phy in (glob('/sys/class/ieee80211/*') ?? []))
+		if (realpath(phy) == device)
+			return basename(phy);
+
+	return null;
+}
+
+function collect_temperature_sensors()
+{
+	let sensors = [];
+	let cpu_temperature = null;
+	let soc_temperature = null;
+
+	for (let zone in (glob('/sys/class/thermal/thermal_zone*') ?? [])) {
+		let zone_type = trim(read_text(zone + '/type', 128) ?? '');
+		let temperature = read_int(zone + '/temp');
+
+		if (temperature == null)
+			continue;
+
+		if (match(zone_type, /^cpu[0-9]+-thermal$/) != null) {
+			if (cpu_temperature == null || temperature > cpu_temperature)
+				cpu_temperature = temperature;
+		}
+		else if (zone_type == 'top-glue-thermal') {
+			soc_temperature = temperature;
+		}
+	}
+
+	if (cpu_temperature != null)
+		add_sensor(sensors, {
+			id: 'cpu',
+			label: 'CPU',
+			temperature: cpu_temperature,
+			max_temperature: null,
+			source: 'cpu*-thermal (maximum)'
+		});
+
+	if (soc_temperature != null)
+		add_sensor(sensors, {
+			id: 'soc',
+			label: 'SoC',
+			temperature: soc_temperature,
+			max_temperature: null,
+			source: 'top-glue-thermal'
+		});
+
+	let radio_bands = null;
+	let ethernet_devices = {};
+
+	for (let ifname, info in ETHERNET_SENSORS) {
+		let device = realpath('/sys/class/net/' + ifname + '/phydev');
+
+		if (device != null)
+			ethernet_devices[device] = { ...info, ifname };
+	}
+
+	for (let hwmon in (glob('/sys/class/hwmon/hwmon*') ?? [])) {
+		let device = realpath(hwmon + '/device');
+		let ethernet = ethernet_devices[device];
+		let name = trim(read_text(hwmon + '/name', 64) ?? '');
+
+		if (ethernet == null && name != 'ath12k_hwmon')
+			continue;
+
+		let temperature = read_int(hwmon + '/temp1_input');
+
+		if (temperature == null)
+			continue;
+
+		let max_temperature = read_int(hwmon + '/temp1_max');
+
+		if (ethernet != null) {
+			add_sensor(sensors, {
+				id: ethernet.id,
+				label: ethernet.label,
+				temperature,
+				max_temperature,
+				source: 'PHY ' + ethernet.ifname
+			});
+			continue;
+		}
+
+		let wiphy = wiphy_for_device(device);
+		let label = trim(read_text(hwmon + '/temp1_label', 64) ?? '');
+		let match_radio = match(label, /^radio([0-9]+)$/);
+
+		if (wiphy == null || match_radio == null)
+			continue;
+
+		if (radio_bands == null)
+			radio_bands = wireless_radio_bands();
+
+		let index = int(match_radio[1]);
+		let band = radio_bands[wiphy + ':' + index];
+		let info = WIRELESS_SENSORS[band];
+
+		if (info != null)
+			add_sensor(sensors, {
+				id: info.id,
+				label: info.label,
+				temperature,
+				max_temperature,
+				source: wiphy + ' radio' + index
+			});
+	}
+
+	return sensors;
+}
+
 /*
  * The SBE1V1K fan is already managed by the kernel thermal framework.
  * Keep this endpoint read-only: a userspace PWM loop would race the
@@ -349,6 +528,7 @@ function collect_fan()
 	let out = {
 		present: false,
 		module_loaded: stat('/sys/module/pwm_fan') != null,
+		sensors: collect_temperature_sensors(),
 		zone: null,
 		zone_type: null,
 		temperature: null,

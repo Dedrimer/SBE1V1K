@@ -3,6 +3,7 @@
 'require baseclass';
 
 const FAN_STATUS = L.url('admin/status/overview/sbe1v1k_fan');
+const SENSOR_ORDER = [ 'cpu', 'soc', 'eth2', 'eth3', 'wifi-2g', 'wifi-5g', 'wifi-6g' ];
 
 function fetchFanStatus()
 {
@@ -34,21 +35,87 @@ function badge(style, text)
 	return E('span', { 'class': 'label ' + style }, [ text ]);
 }
 
-function currentTemperature(fan)
+function sensorName(sensor)
 {
-	var temp = Number(fan.temperature);
-	var hot = (fan.trips || []).find(function(t) { return t.type === 'hot'; });
-	var critical = (fan.trips || []).find(function(t) { return t.type === 'critical'; });
+	switch (sensor.id) {
+	case 'cpu':
+		return _('CPU（最高核心）');
+	case 'soc':
+		return _('SoC');
+	case 'eth2':
+		return _('2.5G LAN');
+	case 'eth3':
+		return _('10G WAN');
+	case 'wifi-2g':
+		return _('2.4 GHz');
+	case 'wifi-5g':
+		return _('5 GHz');
+	case 'wifi-6g':
+		return _('6 GHz');
+	default:
+		return sensor.label || sensor.id || _('传感器');
+	}
+}
+
+function sensorBadge(sensor, fan)
+{
+	var temp = Number(sensor.temperature);
+	var limit = Number(sensor.max_temperature);
 	var style = 'success';
+	var title = sensor.source || '';
 
-	if (critical && temp >= Number(critical.temperature))
+	if (sensor.id === 'soc') {
+		var hot = (fan.trips || []).find(function(t) { return t.type === 'hot'; });
+		var critical = (fan.trips || []).find(function(t) { return t.type === 'critical'; });
+
+		if (critical && temp >= Number(critical.temperature))
+			style = 'important';
+		else if (hot && temp >= Number(hot.temperature))
+			style = 'warning';
+	}
+
+	if (style === 'success' && isFinite(limit) && sensor.max_temperature != null && temp >= limit)
 		style = 'important';
-	else if (hot && temp >= Number(hot.temperature))
+	else if (style === 'success' && isFinite(limit) && sensor.max_temperature != null && temp >= limit - 10000)
 		style = 'warning';
-	else if (temp >= 80000)
-		style = 'notice';
+	else if (style === 'success' && temp >= 95000)
+		style = 'important';
+	else if (style === 'success' && temp >= 80000)
+		style = 'warning';
 
-	return badge(style, fmtTemp(fan.temperature));
+	if (sensor.max_temperature != null)
+		title += (title ? ' · ' : '') + _('上限') + ' ' + fmtTemp(sensor.max_temperature);
+
+	return E('span', {
+		'class': 'label ' + style,
+		'title': title || null
+	}, [ '%s %s'.format(sensorName(sensor), fmtTemp(sensor.temperature)) ]);
+}
+
+function hardwareTemperatures(fan)
+{
+	var sensors = Array.isArray(fan.sensors) ? fan.sensors.slice() : [];
+
+	/* Keep the include compatible with an older backend during upgrades. */
+	if (!sensors.length && fan.temperature != null)
+		sensors.push({ id: 'soc', temperature: fan.temperature, source: fan.zone_type });
+
+	if (!sensors.length)
+		return badge('warning', _('未检测到可读温度传感器'));
+
+	sensors.sort(function(a, b) {
+		var ai = SENSOR_ORDER.indexOf(a.id);
+		var bi = SENSOR_ORDER.indexOf(b.id);
+
+		return (ai < 0 ? SENSOR_ORDER.length : ai) -
+			(bi < 0 ? SENSOR_ORDER.length : bi);
+	});
+
+	return E('div', {
+		'style': 'display:flex;flex-wrap:wrap;gap:.35em .45em'
+	}, sensors.map(function(sensor) {
+		return sensorBadge(sensor, fan);
+	}));
 }
 
 function fanCurve(fan)
@@ -118,13 +185,15 @@ return baseclass.extend({
 	render: function(fan)
 	{
 		var table = E('table', { 'class': 'table' });
+		fan = fan || {};
 
-		if (!fan || !fan.present) {
+		addRow(table, _('硬件温度'), hardwareTemperatures(fan));
+
+		if (!fan.present) {
 			addRow(table, _('状态'), badge('important', _('未检测到 pwm-fan 温控节点')));
 			return table;
 		}
 
-		addRow(table, _('当前温度'), currentTemperature(fan));
 		addRow(table, _('pwm-fan 驱动'), fan.module_loaded
 			? badge('success', _('已加载'))
 			: badge('important', _('未加载')));

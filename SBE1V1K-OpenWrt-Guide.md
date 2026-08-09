@@ -42,7 +42,7 @@ SBE1V1K 已经具备可用的 OpenWrt 设备支持代码，但还不能称为“
 | 100°C | hot | 保持最高冷却档位 |
 | 110°C | critical | 内核临界过热保护 |
 
-OpenWrt 官方 `packages`/`luci` feed 没有适配该内核温控模型的风扇控制 LuCI 插件。常见第三方 `luci-app-fancontrol` 会直接抢写 PWM，或错误地重写 hot/critical trip，因此本项目不引入用户态调速守护程序。“状态 → 概况”集中显示并随系统与内存信息一起刷新当前温度、thermal policy、冷却档位、PWM 占空比、调速曲线、温控回差和过热保护，避免与“SBE1V1K 诊断”重复展示。设备没有提供 TACH hwmon 节点，无法读取真实 RPM。
+OpenWrt 官方 `packages`/`luci` feed 没有适配该内核温控模型的风扇控制 LuCI 插件。常见第三方 `luci-app-fancontrol` 会直接抢写 PWM，或错误地重写 hot/critical trip，因此本项目不引入用户态调速守护程序。“状态 → 概况”集中显示并随系统与内存信息一起刷新 CPU 最高核心、SoC、三频 ath12k 和具备 hwmon 的以太网 PHY 温度，以及 thermal policy、冷却档位、PWM 占空比、调速曲线、温控回差和过热保护，避免与“SBE1V1K 诊断”重复展示。RTL8261BE 可提供 10G WAN 温度；QCA8081 驱动当前没有 2.5G LAN 温度导出。板上没有独立“主板温度”传感器，因此界面如实标记 `SoC`，不会把 `top-glue-thermal` 冒充主板温度。设备也没有提供 TACH hwmon 节点，无法读取真实 RPM。
 
 ## 3. 源码的可追溯组成
 

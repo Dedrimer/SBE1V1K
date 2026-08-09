@@ -32,10 +32,10 @@ Signed-off-by: Jeff Johnson <jeff.johnson@oss.qualcomm.com>
  drivers/net/wireless/ath/ath12k/core.c    |  13 ++++
  drivers/net/wireless/ath/ath12k/core.h    |   3 +
  drivers/net/wireless/ath/ath12k/mac.c     |   4 +
- drivers/net/wireless/ath/ath12k/thermal.c | 124 ++++++++++++++++++++++++++++++
+ drivers/net/wireless/ath/ath12k/thermal.c | 136 ++++++++++++++++++++++++++++++
  drivers/net/wireless/ath/ath12k/thermal.h |  40 ++++++++++
  drivers/net/wireless/ath/ath12k/wmi.c     |  57 +++++++-------
- 7 files changed, 211 insertions(+), 31 deletions(-)
+ 7 files changed, 223 insertions(+), 31 deletions(-)
  create mode 100644 drivers/net/wireless/ath/ath12k/thermal.c
  create mode 100644 drivers/net/wireless/ath/ath12k/thermal.h
 
@@ -124,7 +124,7 @@ Signed-off-by: Jeff Johnson <jeff.johnson@oss.qualcomm.com>
  CFLAGS_trace.o := -I$(src)
 --- /dev/null
 +++ b/drivers/net/wireless/ath/ath12k/thermal.c
-@@ -0,0 +1,124 @@
+@@ -0,0 +1,136 @@
 +// SPDX-License-Identifier: BSD-3-Clause-Clear
 +/*
 + * Copyright (c) 2020 The Linux Foundation. All rights reserved.
@@ -185,10 +185,22 @@ Signed-off-by: Jeff Johnson <jeff.johnson@oss.qualcomm.com>
 +	complete_all(&ar->thermal.wmi_sync);
 +}
 +
++static ssize_t ath12k_thermal_label_show(struct device *dev,
++					 struct device_attribute *attr,
++					 char *buf)
++{
++	struct ath12k *ar = dev_get_drvdata(dev);
++	int radio_index = ar - ar->ah->radio;
++
++	return sysfs_emit(buf, "radio%d\n", radio_index);
++}
++
 +static SENSOR_DEVICE_ATTR_RO(temp1_input, ath12k_thermal_temp, 0);
++static SENSOR_DEVICE_ATTR_RO(temp1_label, ath12k_thermal_label, 0);
 +
 +static struct attribute *ath12k_hwmon_attrs[] = {
 +	&sensor_dev_attr_temp1_input.dev_attr.attr,
++	&sensor_dev_attr_temp1_label.dev_attr.attr,
 +	NULL,
 +};
 +ATTRIBUTE_GROUPS(ath12k_hwmon);
