@@ -564,6 +564,12 @@ function collect()
 }
 
 return {
+	action_fan: function()
+	{
+		http.prepare_content('application/json');
+		http.write_json(collect_fan());
+	},
+
 	action_status: function()
 	{
 		http.prepare_content('application/json');

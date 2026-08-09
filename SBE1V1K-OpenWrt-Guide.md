@@ -42,7 +42,7 @@ SBE1V1K 已经具备可用的 OpenWrt 设备支持代码，但还不能称为“
 | 100°C | hot | 保持最高冷却档位 |
 | 110°C | critical | 内核临界过热保护 |
 
-OpenWrt 官方 `packages`/`luci` feed 没有适配该内核温控模型的风扇控制 LuCI 插件。常见第三方 `luci-app-fancontrol` 会直接抢写 PWM，或错误地重写 hot/critical trip，因此本项目不引入用户态调速守护程序。固件自带的“SBE1V1K 诊断”页会只读显示当前温度、thermal policy、冷却档位、PWM 占空比和全部 trip；设备没有提供 TACH hwmon 节点，无法读取真实 RPM。
+OpenWrt 官方 `packages`/`luci` feed 没有适配该内核温控模型的风扇控制 LuCI 插件。常见第三方 `luci-app-fancontrol` 会直接抢写 PWM，或错误地重写 hot/critical trip，因此本项目不引入用户态调速守护程序。“状态 → 概况”会随系统与内存信息一起刷新当前温度、thermal policy、冷却档位、PWM 占空比、调速曲线和过热保护；“SBE1V1K 诊断”页保留全部 trip 的详细只读信息。设备没有提供 TACH hwmon 节点，无法读取真实 RPM。
 
 ## 3. 源码的可追溯组成
 

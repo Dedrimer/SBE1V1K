@@ -17,5 +17,16 @@
 			"module": "luci.controller.sbe1v1k_diag",
 			"function": "action_status"
 		}
+	},
+
+	"admin/status/overview/sbe1v1k_fan": {
+		"action": {
+			"type": "function",
+			"module": "luci.controller.sbe1v1k_diag",
+			"function": "action_fan"
+		},
+		"depends": {
+			"acl": [ "luci-app-sbe1v1k-diag" ]
+		}
 	}
 }
