@@ -66,11 +66,6 @@ function fmtNum(n)
 	return (n == null) ? '-' : String(n);
 }
 
-function fmtTemp(milli)
-{
-	return (milli == null) ? '-' : (Number(milli) / 1000).toFixed(1) + ' °C';
-}
-
 function fmtUptime(sec)
 {
 	if (sec == null)
@@ -324,59 +319,6 @@ function irqTable(irqs)
 		}));
 }
 
-function fanSection(fan)
-{
-	if (!fan || !fan.present)
-		return statusBadge(false, _('未找到与 thermal zone 绑定的 pwm-fan'));
-
-	var policyOk = fan.policy === 'step_wise';
-	var pwm = Number(fan.pwm);
-	var pwmText = fan.pwm == null ? _('不可用')
-		: fmtNum(fan.pwm) + ' / 255 (' + Math.round(pwm * 100 / 255) + '%)';
-	var levels = fan.levels || [];
-	var active = (fan.trips || []).filter(function(t) {
-		return t.type === 'active';
-	}).sort(function(a, b) {
-		return Number(a.temperature) - Number(b.temperature);
-	});
-	var activeStates = {};
-
-	active.forEach(function(t, i) {
-		activeStates[t.index] = i;
-	});
-
-	var trips = table([ _('Trip'), _('类型'), _('阈值'), _('回差'), _('冷却档位'), _('PWM') ],
-		(fan.trips || []).map(function(t) {
-			var state = activeStates[t.index];
-			var hasState = state != null && state < levels.length;
-
-			return [
-				fmtNum(t.index),
-				plain(t.type || '-'),
-				fmtTemp(t.temperature),
-				fmtTemp(t.hysteresis),
-				hasState ? fmtNum(state) : '-',
-				hasState ? fmtNum(levels[state]) + ' / 255' : '-'
-			];
-		}));
-
-	return E('div', {}, kvRows([
-		[ _('pwm-fan 驱动'), fan.module_loaded ? statusBadge(true, _('已加载')) : statusBadge(false, _('未加载')) ],
-		[ _('温控区域'), plain(fan.zone_type || fan.zone || '-') + ' (' + plain(fan.zone || '-') + ')' ],
-		[ _('当前温度'), fmtTemp(fan.temperature) ],
-		[ _('内核策略'), policyOk ? statusBadge(true, 'step_wise') : statusBadge(false, plain(fan.policy || _('不可用'))) ],
-		[ _('冷却档位'), fmtNum(fan.cooling_state) + ' / ' + fmtNum(fan.max_state) ],
-		[ _('PWM 输出'), pwmText ],
-		[ _('转速反馈'), _('硬件节点未提供 TACH/RPM，仅能显示 PWM 占空比') ],
-		[ _('控制方式'), statusBadge(policyOk, _('设备树 + 内核 thermal governor（只读监控）')) ]
-	]).concat([
-		E('div', { 'class': 'sbe1v1k-note' }, [
-			_('为保留 100°C hot 与 110°C critical 过热保护，诊断页不会启动用户态 PWM 守护程序。')
-		]),
-		trips
-	]));
-}
-
 function cpuCodeTable(codes)
 {
 	codes = codes || [];
@@ -399,7 +341,6 @@ const SBE1V1K_CSS = [
 	'.sbe1v1k-pre { overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }',
 	'.sbe1v1k-node { margin: .5em 0; padding: .75em; border: 1px solid #ddd; border-radius: 4px; }',
 	'.sbe1v1k-node-name { font-weight: bold; margin-bottom: .5em; }',
-	'.sbe1v1k-note { margin: .75em 0; padding: .75em; background: #fff8e1; border-left: 4px solid #f9ab00; }',
 	'.sbe1v1k-loading { padding: 2em; text-align: center; }'
 ].join('\n');
 
@@ -450,7 +391,6 @@ return view.extend({
 		var eip = d.eip || {};
 		var ppe = d.ppe || {};
 		var abi = d.abi || {};
-		var fan = d.fan || {};
 
 		var offload = fw.flow_offloading_hw === '1'
 			? statusBadge(true, _('硬件卸载已启用'))
@@ -469,9 +409,6 @@ return view.extend({
 					[ _('型号'), plain(d.model || 'unknown').trim() ],
 					[ _('运行时间'), plain(d.uptime ? fmtUptime(d.uptime.up) : '-') ],
 					[ _('防火墙卸载'), offload ],
-					[ _('PWM 风扇'), fan.present
-						? statusBadge(fan.policy === 'step_wise', fmtTemp(fan.temperature) + ' · ' + fmtNum(fan.cooling_state) + '/' + fmtNum(fan.max_state))
-						: statusBadge(false, _('未检测到')) ],
 					[ _('PPE 驱动'), ppeOk ? statusBadge(true, _('节点可读')) : statusBadge(false, _('无 PPE 节点')) ],
 					[ _('EIP 加密'), eipOk ? statusBadge(true, _('运行节点可用')) : statusBadge(false, _('加速不可用')) ]
 				])),
@@ -498,11 +435,6 @@ return view.extend({
 					[ 'qcom_ppe_ds_queue_start', statusBadge(!!abi.qcom_ppe_ds_queue_start, abi.qcom_ppe_ds_queue_start ? 'present' : 'missing') ],
 					[ 'qcom_ppe_eip_provider', statusBadge(!!abi.qcom_ppe_eip_provider, abi.qcom_ppe_eip_provider ? 'present' : 'missing') ]
 				]))
-			]),
-
-			E('div', { 'class': 'cbi-map' }, [
-				E('h2', {}, [ _('温度与风扇') ]),
-				section(_('内核自动调速'), fanSection(fan))
 			]),
 
 			E('div', { 'class': 'cbi-map' }, [

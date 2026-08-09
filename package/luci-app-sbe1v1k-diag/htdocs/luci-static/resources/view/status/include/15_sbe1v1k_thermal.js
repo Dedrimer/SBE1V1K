@@ -83,6 +83,22 @@ function protection(fan)
 	return values.length ? values.join(' · ') : '-';
 }
 
+function hysteresis(fan)
+{
+	var values = [];
+
+	(fan.trips || []).forEach(function(t) {
+		if (t.type !== 'active' || t.hysteresis == null)
+			return;
+
+		var value = fmtTemp(t.hysteresis);
+		if (values.indexOf(value) < 0)
+			values.push(value);
+	});
+
+	return values.length ? values.join(' · ') : '-';
+}
+
 function addRow(table, title, value)
 {
 	table.appendChild(E('tr', { 'class': 'tr' }, [
@@ -121,6 +137,7 @@ return baseclass.extend({
 			: badge('warning', fan.policy || _('策略不可用')));
 		addRow(table, _('温控区域'), '%s (%s)'.format(fan.zone_type || '-', fan.zone || '-'));
 		addRow(table, _('调速曲线'), fanCurve(fan));
+		addRow(table, _('温控回差'), hysteresis(fan));
 		addRow(table, _('过热保护'), protection(fan));
 		addRow(table, _('转速反馈'), _('无 TACH/RPM 节点，仅显示 PWM'));
 

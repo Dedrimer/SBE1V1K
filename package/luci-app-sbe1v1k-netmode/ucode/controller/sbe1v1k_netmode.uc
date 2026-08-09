@@ -357,12 +357,13 @@ function detect_mode(cu)
 	let dhcp_ignored = false;
 
 	cu.load('network');
-	cu.foreach('network', 'interface', function(s) {
-		let name = s['.name'];
+	has_relay = cu.get('network', RELAY, 'proto') == 'relay';
 
-		if (cu.get('network', name, 'proto') == 'relay')
-			has_relay = true;
-	});
+	/* Recognize only the layout created by the first plugin release. */
+	if (!has_relay && cu.get('network', 'relay', 'proto') == 'relay' &&
+	    cu.get('network', 'relay', 'network') == 'lan wwan' &&
+	    cu.get('network', 'wwan', 'device') == 'wwan0')
+		has_relay = true;
 
 	has_gateway = cu.get('network', 'lan', 'gateway') != null;
 	cu.load('dhcp');

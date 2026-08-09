@@ -557,7 +557,6 @@ function collect()
 			qcom_ppe_ds_queue_start: ks != null && match(ks, /qcom_ppe_ds_queue_start/) != null,
 			qcom_ppe_eip_provider: ks != null && match(ks, /qcom_ppe_eip_provider_register/) != null
 		},
-		fan: collect_fan(),
 		ppe,
 		eip
 	};

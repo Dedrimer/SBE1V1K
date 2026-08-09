@@ -650,6 +650,37 @@ const SBE1V1K_CSS = [
 	'#sbe1v1k-form input[type="text"], #sbe1v1k-form input[type="password"], #sbe1v1k-form select { width: 100%; box-sizing: border-box; }'
 ].join('\n');
 
+function build(d)
+{
+	lastData = d;
+	messageBox = E('div', {}, []);
+	var pending = d.pending && d.pending.active;
+
+	var applyBtn = E('button', {
+		'id': 'sbe1v1k-apply-btn',
+		'class': 'cbi-button cbi-button-apply',
+		'disabled': pending || null,
+		'click': function(ev) { ev.preventDefault(); doApply(); }
+	}, [ pending ? _('切换进行中…') : _('应用当前模式') ]);
+
+	return E('div', {}, [
+		E('style', {}, [ SBE1V1K_CSS ]),
+		buildPending(d.pending),
+		buildResult(d.result),
+		E('div', { 'class': 'cbi-map' }, [
+			E('h2', {}, [ _('网络模式切换') ]),
+			buildStatus(d),
+			section(_('选择模式'), buildModeCards(selectedMode)),
+			E('div', { 'id': 'sbe1v1k-form-wrap' }, [ buildForm(selectedMode, d) ])
+		]),
+		E('div', { 'class': 'cbi-page-actions' }, [
+			applyBtn,
+			E('button', { 'class': 'cbi-button cbi-button-reset', 'click': function(ev) { ev.preventDefault(); refresh(); } }, [ _('刷新') ])
+		]),
+		messageBox
+	]);
+}
+
 return view.extend({
 	load: function()
 	{
@@ -661,43 +692,12 @@ return view.extend({
 		selectedMode = data.mode || 'router';
 		lastData = data;
 
-		this.page = E('div', { 'id': 'sbe1v1k-root' }, [ this.build(data) ]);
+		this.page = E('div', { 'id': 'sbe1v1k-root' }, [ build(data) ]);
 		return this.page;
 	},
 
 	refresh: function()
 	{
 		refresh();
-	},
-
-	build: function(d)
-	{
-		lastData = d;
-		messageBox = E('div', {}, []);
-		var pending = d.pending && d.pending.active;
-
-		var applyBtn = E('button', {
-			'id': 'sbe1v1k-apply-btn',
-			'class': 'cbi-button cbi-button-apply',
-			'disabled': pending || null,
-			'click': function(ev) { ev.preventDefault(); doApply(); }
-		}, [ pending ? _('切换进行中…') : _('应用当前模式') ]);
-
-		return E('div', {}, [
-			E('style', {}, [ SBE1V1K_CSS ]),
-			buildPending(d.pending),
-			buildResult(d.result),
-			E('div', { 'class': 'cbi-map' }, [
-				E('h2', {}, [ _('网络模式切换') ]),
-				buildStatus(d),
-				section(_('选择模式'), buildModeCards(selectedMode)),
-				E('div', { 'id': 'sbe1v1k-form-wrap' }, [ buildForm(selectedMode, d) ])
-			]),
-			E('div', { 'class': 'cbi-page-actions' }, [
-				applyBtn,
-				E('button', { 'class': 'cbi-button cbi-button-reset', 'click': function(ev) { ev.preventDefault(); refresh(); } }, [ _('刷新') ])
-			]),
-			messageBox
-		]);
 	}
 });

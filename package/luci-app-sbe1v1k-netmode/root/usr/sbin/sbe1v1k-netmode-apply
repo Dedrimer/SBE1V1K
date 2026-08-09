@@ -90,10 +90,10 @@ kill_watchdog() {
 restart_services() {
 	local rc=0
 	/etc/init.d/network restart >> "$LOG" 2>&1 || rc=1
-	/etc/init.d/dnsmasq restart >> "$LOG" 2>&1 || rc=1
-	/etc/init.d/odhcpd restart >> "$LOG" 2>&1 || rc=1
-	/etc/init.d/relayd restart >> "$LOG" 2>&1 || rc=1
-	/etc/init.d/firewall reload >> "$LOG" 2>&1 || rc=1
+	[ ! -x /etc/init.d/dnsmasq ] || /etc/init.d/dnsmasq restart >> "$LOG" 2>&1 || rc=1
+	[ ! -x /etc/init.d/odhcpd ] || /etc/init.d/odhcpd restart >> "$LOG" 2>&1 || rc=1
+	[ ! -x /etc/init.d/relayd ] || /etc/init.d/relayd restart >> "$LOG" 2>&1 || rc=1
+	[ ! -x /etc/init.d/firewall ] || /etc/init.d/firewall reload >> "$LOG" 2>&1 || rc=1
 	return "$rc"
 }
 
