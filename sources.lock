@@ -1,4 +1,4 @@
-# Reproducible SBE1V1K source inputs, frozen on 2026-07-22.
+# Reproducible SBE1V1K source inputs, last refreshed on 2026-08-15.
 # The current repository is the OpenWrt working tree; no preparation script is required.
 OPENWRT_REPOSITORY=https://github.com/andrewjlamarche/openwrt.git
 OPENWRT_BRANCH=sbe1v1k
@@ -29,12 +29,18 @@ QCN9274_BDF_SHA256=5ed8477ace2ce31236d756de24f31e7169acc69d8df18e5b81e7fdea0715e
 ATH12K_PER_RADIO_MAC_LOCAL_COMMIT=d5ed1d2f5d
 QCN9274_BDF_LOCAL_COMMIT=c221a773d6
 
-# Official feeds used by configs/feeds.conf.
-PACKAGES_FEED_COMMIT=c7e6d5ce4252fe3ebe7268cfea1e935cd5f52339
-LUCI_FEED_COMMIT=3e12b5338f44562159b6b032591ef5afa611c1e0
+# Official feeds used by feeds.conf.default. Packages and LuCI were refreshed
+# on 2026-08-15; the other feeds retain their previously verified revisions.
+PACKAGES_FEED_COMMIT=ae3874f304d85d8978422f8e466105b9bebf2e7f
+LUCI_FEED_COMMIT=c62742fce9e1266491401f07205607857192ca90
 ROUTING_FEED_COMMIT=c7872431105f69894201dc522b7560e47d1e8ba9
 TELEPHONY_FEED_COMMIT=5d68d53c160a325ea9d03fce393e051573bcc736
 VIDEO_FEED_COMMIT=a951381b6c58b9b1eb087f09c9a20cff4ffe8063
+
+# Container versions provided by PACKAGES_FEED_COMMIT.
+DOCKER_VERSION=29.6.1
+CONTAINERD_VERSION=2.2.5
+RUNC_VERSION=1.3.6
 
 # Optional LuCI experience packages pinned for reproducible firmware builds.
 ARGON_REPOSITORY=https://github.com/jerrykuku/luci-theme-argon.git

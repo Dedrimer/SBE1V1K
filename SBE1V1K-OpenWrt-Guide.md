@@ -55,7 +55,7 @@ OpenWrt 官方 `packages`/`luci` feed 没有适配该内核温控模型的风扇
 67a6d6b5080b00925eec3a2c16710047959044e3
 ```
 
-`feeds.conf.default` 把 packages、LuCI、routing、telephony、video 五个官方 feed 固定到 2026-07-22 的精确提交。否则 `feeds update -a` 会随时间漂移，即使设备源码 tree 相同也可能构建出不同内容。
+`feeds.conf.default` 把 packages、LuCI、routing、telephony、video 五个官方 feed 固定到精确提交。packages 与 LuCI 已在 2026-08-15 刷新，其余 feed 保留此前验证过的提交；这样 `feeds update -a` 不会随时间漂移，即使设备源码 tree 相同也能保持输入可复现。
 
 设备相关源码提交如下：
 

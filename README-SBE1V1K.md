@@ -32,9 +32,10 @@ bash ./build-sbe1v1k.sh
 
 可用 `bash ./build-sbe1v1k.sh --help` 查看并行数、清理构建和仅下载等选项。脚本会继承
 `HTTP_PROXY`、`HTTPS_PROXY` 等标准代理环境变量。固件默认使用 Argon 主题并预置
-iStore，同时包含 LuCI 软件包管理器、Docker、Aria2、Samba、文件管理器、Web 终端、
-SmartDNS、广告过滤、流量统计、SQM、DDNS、UPnP、WireGuard 和 eMMC 管理工具。
-OpenWrt 官方 feeds、Argon 与 iStore 源均固定到精确提交以便复现构建。
+iStore、LuCI 软件包管理器、SBE1V1K 诊断与网络模式页面，以及 Docker Engine/CLI；
+不预置 Dockerman、Aria2、Samba、SmartDNS、广告过滤、流量统计、SQM、DDNS、UPnP
+和 WireGuard。所有 feeds 与第三方界面源码均固定到精确提交以便复现构建，其中 Docker
+固定为 29.6.1，LuCI 来自 2026-08-15 刷新的官方 feed。
 脚本会统计固件编译耗时，所有固件、软件包索引和构建信息统一写入根目录 `out/`；
 需要清理输出时可直接删除该目录，`out/` 已加入 `.gitignore`。
 完整执行日志保存在 `.build-logs/build-YYYYMMDD-HHMMSS-PID.log`，该目录不会被
