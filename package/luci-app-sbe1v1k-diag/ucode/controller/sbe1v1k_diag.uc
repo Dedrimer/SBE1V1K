@@ -8,6 +8,7 @@
 
 import { open, glob, stat, popen, basename, realpath } from 'fs';
 import { cursor } from 'uci';
+import { connect } from 'ubus';
 import * as nl80211 from 'nl80211';
 
 const MAX_READ = 262144;
@@ -375,13 +376,13 @@ function band_for_ranges(ranges)
 }
 
 /*
- * Map the cfg80211 per-wiphy radio index to its currently advertised band.
+ * Collect each cfg80211 per-wiphy radio and its currently advertised band.
  * This is deliberately resolved at runtime: ath12k WSI device probe order is
  * not a suitable ABI and must not be inferred from hwmonX numbering.
  */
-function wireless_radio_bands()
+function wireless_radio_inventory()
 {
-	let out = {};
+	let out = [];
 	let phys = nl80211.request(
 		nl80211.const.NL80211_CMD_GET_WIPHY,
 		nl80211.const.NLM_F_DUMP,
@@ -392,13 +393,32 @@ function wireless_radio_bands()
 		if (type(phy?.wiphy_name) != 'string')
 			continue;
 
+		let driver_path = realpath('/sys/class/ieee80211/' + phy.wiphy_name + '/device/driver');
+		let driver = driver_path != null ? basename(driver_path) : null;
+
 		for (let radio in (phy.radios ?? [])) {
 			let band = band_for_ranges(radio.freq_ranges);
 
 			if (band != null)
-				out[phy.wiphy_name + ':' + int(radio.index)] = band;
+				push(out, {
+					phy: phy.wiphy_name,
+					index: int(radio.index),
+					band,
+					driver,
+					mac: trim(read_text('/sys/class/ieee80211/' + phy.wiphy_name + '/macaddress', 64) ?? '')
+				});
 		}
 	}
+
+	return out;
+}
+
+function wireless_radio_bands()
+{
+	let out = {};
+
+	for (let radio in wireless_radio_inventory())
+		out[radio.phy + ':' + radio.index] = radio.band;
 
 	return out;
 }
@@ -596,6 +616,95 @@ function collect_fan()
 	return out;
 }
 
+function collect_ath12k_status()
+{
+	let cu = cursor();
+	let ubus = connect();
+	let runtime = ubus.call('network.wireless', 'status', {});
+	let configured = {};
+	let physical = {};
+	let bands = [];
+	let detected = 0;
+	let configured_count = 0;
+	let enabled = 0;
+	let running = 0;
+	let failed = 0;
+
+	cu.load('wireless');
+	cu.foreach('wireless', 'wifi-device', function(s) {
+		let name = s['.name'];
+		let band = cu.get('wireless', name, 'band');
+
+		if (WIRELESS_SENSORS[band] != null && configured[band] == null)
+			configured[band] = {
+				name,
+				disabled: cu.get('wireless', name, 'disabled') == '1'
+			};
+	});
+
+	for (let radio in wireless_radio_inventory()) {
+		if (match(radio.driver ?? '', /^ath12k/) == null || physical[radio.band] != null)
+			continue;
+
+		physical[radio.band] = radio;
+	}
+
+	for (let band in [ '2g', '5g', '6g' ]) {
+		let config = configured[band];
+		let radio = physical[band];
+		let state = config != null && type(runtime) == 'object' ? runtime[config.name] : null;
+		let interfaces = type(state?.interfaces) == 'array' ? state.interfaces : [];
+		let active_interfaces = 0;
+
+		for (let iface in interfaces)
+			if (type(iface?.ifname) == 'string' && iface.ifname != '')
+				active_interfaces++;
+
+		if (radio != null)
+			detected++;
+		if (config != null)
+			configured_count++;
+		if (config != null && !config.disabled)
+			enabled++;
+		if (state?.up)
+			running++;
+		if (radio != null && config != null && !config.disabled && !state?.up)
+			failed++;
+
+		push(bands, {
+			band,
+			detected: radio != null,
+			phy: radio?.phy,
+			radio_index: radio?.index,
+			driver: radio?.driver,
+			mac: radio?.mac,
+			configured: config != null,
+			device: config?.name,
+			disabled: config?.disabled ?? false,
+			up: !!state?.up,
+			pending: !!state?.pending,
+			interfaces: length(interfaces),
+			active_interfaces
+		});
+	}
+
+	let debugfs_devices = glob('/sys/kernel/debug/ath12k/*') ?? [];
+	let dp_stats = glob('/sys/kernel/debug/ath12k/*/device_dp_stats') ?? [];
+	let module_loaded = stat('/sys/module/ath12k') != null;
+
+	return {
+		module_loaded,
+		healthy: module_loaded && detected == 3 && configured_count == 3 && failed == 0,
+		detected,
+		configured: configured_count,
+		enabled,
+		running,
+		debugfs_devices: length(debugfs_devices),
+		dp_stats: length(dp_stats),
+		bands
+	};
+}
+
 function collect()
 {
 	let cu = cursor();
@@ -743,6 +852,12 @@ function collect()
 }
 
 return {
+	action_ath12k: function()
+	{
+		http.prepare_content('application/json');
+		http.write_json(collect_ath12k_status());
+	},
+
 	action_fan: function()
 	{
 		http.prepare_content('application/json');

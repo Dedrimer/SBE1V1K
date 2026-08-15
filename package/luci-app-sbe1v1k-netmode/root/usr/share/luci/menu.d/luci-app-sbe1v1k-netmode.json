@@ -55,6 +55,18 @@
 		}
 	},
 
+	"admin/network/sbe1v1k_netmode/wifi_global": {
+		"action": {
+			"type": "function",
+			"module": "luci.controller.sbe1v1k_netmode",
+			"function": "action_wifi_global",
+			"post": true
+		},
+		"depends": {
+			"acl": [ "luci-app-sbe1v1k-netmode" ]
+		}
+	},
+
 	"admin/network/sbe1v1k_netmode/confirm": {
 		"action": {
 			"type": "function",

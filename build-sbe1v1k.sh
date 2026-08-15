@@ -265,6 +265,16 @@ elif ! grep -Fq '+USE_APK:luci-compat' "$istore_makefile"; then
 	die "the locked iStore source does not match the expected dependency format"
 fi
 
+luci_wireless="$SOURCE_DIR/feeds/luci/modules/luci-mod-network/htdocs/luci-static/resources/view/network/wireless.js"
+luci_wireless_patch="$SOURCE_DIR/config/luci-sbe1v1k-wireless-global-toggle.patch"
+[[ -f "$luci_wireless" ]] || die "the locked LuCI wireless view was not downloaded"
+[[ -f "$luci_wireless_patch" ]] || die "the SBE1V1K LuCI wireless patch is missing"
+if ! grep -Fq 'const SBE1V1K_WIFI_GLOBAL' "$luci_wireless"; then
+	patch --batch --forward -d "$SOURCE_DIR/feeds/luci" -p1 < "$luci_wireless_patch"
+fi
+grep -Fq 'renderSbe1v1kWifiGlobal(), nodes' "$luci_wireless" || \
+	die "the SBE1V1K LuCI wireless patch was not applied"
+
 ./scripts/feeds install -a
 
 argon_source="$SOURCE_DIR/feeds/argon"

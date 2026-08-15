@@ -1,0 +1,112 @@
+--- a/modules/luci-mod-network/htdocs/luci-static/resources/view/network/wireless.js
++++ b/modules/luci-mod-network/htdocs/luci-static/resources/view/network/wireless.js
+@@ -12,6 +12,100 @@
+ 
+ const isReadonlyView = !L.hasViewPermission();
+ 
++const SBE1V1K_WIFI_GLOBAL = L.url('admin/network/sbe1v1k_netmode/wifi_global');
++const SBE1V1K_WIFI_BANDS = [ '2g', '5g', '6g' ];
++
++function sbe1v1kWifiBandLabel(band) {
++	switch (band) {
++	case '2g':
++		return '2.4 GHz';
++	case '5g':
++		return '5 GHz';
++	case '6g':
++		return '6 GHz';
++	default:
++		return band || '-';
++	}
++}
++
++function callSbe1v1kWifiGlobal(enabled) {
++	const body = new URLSearchParams();
++	body.append('token', L.env?.token || '');
++	body.append('enabled', enabled ? '1' : '0');
++
++	return fetch(SBE1V1K_WIFI_GLOBAL, {
++		method: 'POST',
++		headers: {
++			'Content-Type': 'application/x-www-form-urlencoded',
++			'X-Requested-With': 'XMLHttpRequest'
++		},
++		body: body.toString()
++	}).then(function(response) {
++		if (!response.ok)
++			throw new Error('HTTP ' + response.status);
++
++		return response.json();
++	});
++}
++
++function renderSbe1v1kWifiGlobal() {
++	const radios = uci.sections('wireless', 'wifi-device').filter(function(radio) {
++		return SBE1V1K_WIFI_BANDS.indexOf(radio.band) >= 0;
++	}).sort(function(a, b) {
++		return SBE1V1K_WIFI_BANDS.indexOf(a.band) - SBE1V1K_WIFI_BANDS.indexOf(b.band);
++	});
++	const enabledCount = radios.filter(function(radio) { return radio.disabled != '1'; }).length;
++	const allEnabled = radios.length > 0 && enabledCount == radios.length;
++	const allDisabled = radios.length > 0 && enabledCount == 0;
++	const targetEnabled = !allEnabled;
++	const stateText = radios.length == 0 ? _('未检测到 radio') : (allEnabled ? _('全部开启') : (allDisabled ? _('全部关闭') : _('部分开启')));
++	const stateStyle = radios.length == 0 ? 'important' : (allEnabled ? 'success' : (allDisabled ? 'important' : 'warning'));
++	const button = E('button', {
++		'class': 'cbi-button important ' + (targetEnabled ? 'cbi-button-positive' : 'cbi-button-negative'),
++		'disabled': isReadonlyView || radios.length == 0,
++		'click': function(ev) {
++			if (!targetEnabled && !confirm(_('关闭全部 Wi-Fi 会断开所有 2.4、5 和 6 GHz 无线连接。确定继续吗？')))
++				return;
++
++			const node = ev.currentTarget;
++			node.disabled = true;
++			node.classList.add('spinning');
++
++			callSbe1v1kWifiGlobal(targetEnabled).then(function(result) {
++				if (!result.ok)
++					throw new Error(result.error || _('无线总开关操作失败'));
++
++				ui.addNotification(null, E('p', [ targetEnabled
++					? _('正在开启全部 Wi-Fi…')
++					: _('正在关闭全部 Wi-Fi…') ]));
++				window.setTimeout(function() { location.reload(); }, 2500);
++			}).catch(function(error) {
++				node.disabled = false;
++				node.classList.remove('spinning');
++				ui.addNotification(null, E('p', [ _('无线总开关操作失败：') + error.message ]));
++			});
++		}
++	}, [ targetEnabled ? _('开启全部 Wi-Fi') : _('关闭全部 Wi-Fi') ]);
++
++	return E('div', { 'class': 'cbi-section' }, [
++		E('h3', {}, [ _('全局 Wi-Fi 开关') ]),
++		E('div', { 'class': 'cbi-section-node' }, [
++			E('div', {
++				'style': 'display:flex;align-items:center;justify-content:space-between;gap:1em;flex-wrap:wrap'
++			}, [
++				E('div', { 'style': 'display:flex;align-items:center;gap:.4em;flex-wrap:wrap' }, [
++					E('span', { 'class': 'label ' + stateStyle }, [ stateText ])
++				].concat(radios.map(function(radio) {
++					return E('span', { 'class': 'label ' + (radio.disabled == '1' ? 'warning' : 'success') }, [
++						sbe1v1kWifiBandLabel(radio.band) + ' · ' + (radio.disabled == '1' ? _('关闭') : _('开启'))
++					]);
++				}))),
++				button
++			])
++		])
++	]);
++}
++
+ function count_changes(section_id) {
+ 	const changes = ui.changes.changes?.wireless;
+ 	if (!Array.isArray(changes)) return 0;
+@@ -2677,7 +2771,7 @@ return view.extend({
+ 
+ 			cbi_update_table(table, [], E('em', { 'class': 'spinning' }, _('Collecting data...')));
+ 
+-			return E([ nodes, E('h3', _('Associated Stations')), table ]);
++			return E([ renderSbe1v1kWifiGlobal(), nodes, E('h3', _('Associated Stations')), table ]);
+ 		}, this, m));
+ 	},
+ 

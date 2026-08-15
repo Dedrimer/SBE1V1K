@@ -683,6 +683,60 @@ return {
 		http.write_json({ ok: true, band, radio, results: scan_networks(cells, band) });
 	},
 
+	action_wifi_global: function()
+	{
+		http.prepare_content('application/json');
+
+		if (collect_pending().active) {
+			json_error('网络切换进行中，暂时不能操作无线总开关');
+			return;
+		}
+
+		let value = http.formvalue('enabled');
+		if (value != '0' && value != '1') {
+			json_error('无线总开关参数无效');
+			return;
+		}
+
+		let enabled = value == '1';
+		let cu = cursor();
+		let radios = [];
+
+		cu.load('wireless');
+		cu.load(CFG);
+		cu.foreach('wireless', 'wifi-device', function(s) {
+			let name = s['.name'];
+			let band = cu.get('wireless', name, 'band');
+
+			if (array_contains(BANDS, band))
+				push(radios, { name, band });
+		});
+
+		if (length(radios) == 0) {
+			json_error('未找到 2.4/5/6 GHz 无线设备');
+			return;
+		}
+
+		for (let radio in radios)
+			cu.set('wireless', radio.name, 'disabled', enabled ? '0' : '1');
+
+		cu.set(CFG, 'settings', 'wifi_global_enabled', enabled ? '1' : '0');
+		cu.save('wireless');
+		cu.save(CFG);
+		cu.commit(CFG);
+		cu.commit('wireless');
+
+		let command = enabled ? 'up' : 'down';
+		let scheduled = system('(sleep 1; /sbin/wifi ' + command + ' >/dev/null 2>&1) &') == 0;
+
+		http.write_json({
+			ok: true,
+			enabled,
+			radios,
+			scheduled
+		});
+	},
+
 	action_apply: function()
 	{
 		http.prepare_content('application/json');

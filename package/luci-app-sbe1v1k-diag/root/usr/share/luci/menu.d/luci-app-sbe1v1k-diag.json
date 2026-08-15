@@ -28,5 +28,16 @@
 		"depends": {
 			"acl": [ "luci-app-sbe1v1k-diag" ]
 		}
+	},
+
+	"admin/status/overview/sbe1v1k_ath12k": {
+		"action": {
+			"type": "function",
+			"module": "luci.controller.sbe1v1k_diag",
+			"function": "action_ath12k"
+		},
+		"depends": {
+			"acl": [ "luci-app-sbe1v1k-diag" ]
+		}
 	}
 }

@@ -26,7 +26,10 @@ recover()
 	[ -s /etc/config/wireless ] || return 0
 
 	local iface device band disabled ssid enabled_any=0 enabled_non6=0
+	local global_wifi_enabled
 	local changed=0 country valid_country_code
+	global_wifi_enabled=$(uci -q get sbe1v1k_netmode.settings.wifi_global_enabled)
+	[ "$global_wifi_enabled" = 0 ] || global_wifi_enabled=1
 
 valid_country()
 {
@@ -70,7 +73,7 @@ valid_country()
 
 	# If no AP is enabled, or the only enabled AP is 6 GHz, restore all AP
 	# interfaces.  Existing SSIDs, encryption and keys are left untouched.
-	if [ "$enabled_any" = 0 ] || [ "$enabled_non6" = 0 ]; then
+	if [ "$global_wifi_enabled" = 1 ] && { [ "$enabled_any" = 0 ] || [ "$enabled_non6" = 0 ]; }; then
 		for iface in $(uci -q show wireless | sed -n "s/^wireless\.\([^.=]*\)=wifi-iface$/\1/p"); do
 			[ "$(uci -q get wireless.$iface.mode)" = ap ] || continue
 			if [ "$(uci -q get wireless.$iface.disabled)" = 1 ]; then
@@ -88,7 +91,13 @@ valid_country()
 			uci -q set wireless.$device.country="$valid_country_code"
 			changed=1
 		fi
-		if [ "$(uci -q get wireless.$device.disabled)" = 1 ]; then
+		disabled=$(uci -q get wireless.$device.disabled)
+		if [ "$global_wifi_enabled" = 0 ]; then
+			if [ "$disabled" != 1 ]; then
+				uci -q set wireless.$device.disabled=1
+				changed=1
+			fi
+		elif [ "$disabled" = 1 ]; then
 			uci -q set wireless.$device.disabled=0
 			changed=1
 		fi

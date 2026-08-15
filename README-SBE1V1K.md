@@ -36,6 +36,8 @@ iStore、LuCI 软件包管理器、SBE1V1K 诊断与网络模式页面，以及 
 不预置 Dockerman、Aria2、Samba、SmartDNS、广告过滤、流量统计、SQM、DDNS、UPnP
 和 WireGuard。所有 feeds 与第三方界面源码均固定到精确提交以便复现构建，其中 Docker
 固定为 29.6.1，LuCI 来自 2026-08-15 刷新的官方 feed。
+管理首页会优先显示 ath12k 驱动与三频 radio 状态；“网络 → 无线”页面提供 2.4、5、
+6 GHz 全局开关，用户主动关闭无线后重启设备也会保持关闭。
 脚本会统计固件编译耗时，所有固件、软件包索引和构建信息统一写入根目录 `out/`；
 需要清理输出时可直接删除该目录，`out/` 已加入 `.gitignore`。
 完整执行日志保存在 `.build-logs/build-YYYYMMDD-HHMMSS-PID.log`，该目录不会被
@@ -79,6 +81,7 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 cp configs/sbe1v1k.config .config
 ./scripts/feeds update -a
 patch --batch --forward -d feeds/istore -p1 < config/istore-openwrt-main.patch
+patch --batch --forward -d feeds/luci -p1 < config/luci-sbe1v1k-wireless-global-toggle.patch
 ./scripts/feeds install -a
 mkdir -p feeds/argon
 git -C feeds/argon init
