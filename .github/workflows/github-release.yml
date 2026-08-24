@@ -1,4 +1,4 @@
-name: Build and publish SBE1V1K release
+name: Build and publish SBE1V1K firmware
 
 on:
   push:
@@ -6,6 +6,10 @@ on:
       - "v*"
   workflow_dispatch:
     inputs:
+      release_tag:
+        description: "Release tag to publish, for example v0.3.0"
+        required: true
+        type: string
       jobs:
         description: "Parallel make jobs"
         required: false
@@ -30,10 +34,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build SBE1V1K firmware
+  build-and-release:
+    name: Build and publish firmware
     runs-on: ubuntu-24.04
     timeout-minutes: 360
+    env:
+      OUTPUT_DIR: ${{ github.workspace }}/out/targets/qualcommbe/ipq95xx
+      RELEASE_DIR: ${{ github.workspace }}/release
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
     steps:
       - name: Check out source
         uses: actions/checkout@v6
@@ -46,9 +54,18 @@ jobs:
           uname -a
           printf 'Architecture: '; uname -m
           printf 'CPU cores: '; nproc
+          printf 'Compiler: '; gcc --version | head -n 1
           printf 'Disk:\n'; df -h
 
-      - name: Build firmware
+      - name: Validate release tag
+        run: |
+          set -euxo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]] || {
+            printf 'Release tag must look like v1.2.3 or v1.2.3-preview1: %s\n' "$RELEASE_TAG" >&2
+            exit 1
+          }
+
+      - name: Build from a clean OpenWrt tree
         env:
           BUILD_JOBS: ${{ inputs.jobs || 4 }}
           BUILD_CLEAN: ${{ inputs.clean }}
@@ -64,31 +81,55 @@ jobs:
           fi
           bash ./build-sbe1v1k.sh "${args[@]}"
 
-      - name: Prepare release assets
+      - name: Collect release assets
         run: |
-          set -euxo pipefail
-          output_dir="$GITHUB_WORKSPACE/out/targets/qualcommbe/ipq95xx"
-          release_dir="$GITHUB_WORKSPACE/release"
-          mkdir -p "$release_dir"
-          find "$output_dir" -maxdepth 1 -type f \
-            \( -name '*askey_sbe1v1k*squashfs-sysupgrade.bin' \
-            -o -name '*askey_sbe1v1k*initramfs-uImage.itb' \
-            -o -name '*askey_sbe1v1k*squashfs-recovery.bin' \) \
-            -exec cp -v {} "$release_dir/" \;
-          compgen -G "$release_dir/*askey_sbe1v1k*" >/dev/null
-          sha256sum "$release_dir"/*askey_sbe1v1k* > "$release_dir/SHA256SUMS"
-          cp -v out/build-time.txt "$release_dir/"
-          ls -lh "$release_dir"
+          set -Eeuo pipefail
+          mkdir -p "$RELEASE_DIR"
 
-      - name: Upload release assets
-        uses: actions/upload-artifact@v4
+          mapfile -t images < <(find "$OUTPUT_DIR" -maxdepth 1 -type f \
+            \( -name '*askey_sbe1v1k*.bin' -o -name '*askey_sbe1v1k*.itb' \) | sort)
+          ((${#images[@]} >= 3)) || {
+            printf 'Expected at least three SBE1V1K images in %s\n' "$OUTPUT_DIR" >&2
+            exit 1
+          }
+          printf 'Firmware images:\n'
+          printf '  %s\n' "${images[@]}"
+          cp -v "${images[@]}" "$RELEASE_DIR/"
+
+          for metadata in config.buildinfo feeds.buildinfo version.buildinfo; do
+            metadata_path="$(find "$OUTPUT_DIR" -maxdepth 1 -type f -name "$metadata" -print -quit)"
+            [[ -n "$metadata_path" ]] || {
+              printf 'Missing required release metadata: %s\n' "$metadata" >&2
+              exit 1
+            }
+            cp -v "$metadata_path" "$RELEASE_DIR/"
+          done
+
+          mapfile -t manifests < <(find "$OUTPUT_DIR" -maxdepth 1 -type f \
+            -name '*askey_sbe1v1k*.manifest' | sort)
+          ((${#manifests[@]} > 0)) || {
+            printf 'Missing SBE1V1K manifest in %s\n' "$OUTPUT_DIR" >&2
+            exit 1
+          }
+          cp -v "${manifests[@]}" "$RELEASE_DIR/"
+          cp -v out/build-time.txt "$RELEASE_DIR/"
+
+          (cd "$RELEASE_DIR" && sha256sum \
+            *.bin *.itb *.manifest *.buildinfo build-time.txt > sha256sums)
+          printf '\nRelease files:\n'
+          find "$RELEASE_DIR" -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3
         with:
-          name: sbe1v1k-release-assets
-          path: release/
-          if-no-files-found: error
-          retention-days: 14
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: SBE1V1K OpenWrt ${{ env.RELEASE_TAG }}
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
+          files: release/*
 
-      - name: Upload build logs and output
+      - name: Upload build logs on every outcome
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -99,25 +140,3 @@ jobs:
           path: |
             .build-logs/
             out/
-
-  release:
-    name: Publish GitHub Release
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Download release assets
-        uses: actions/download-artifact@v4
-        with:
-          name: sbe1v1k-release-assets
-          path: release
-
-      - name: Publish release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: SBE1V1K OpenWrt ${{ github.ref_name }}
-          generate_release_notes: true
-          draft: false
-          prerelease: false
-          files: release/*
