@@ -343,7 +343,7 @@ recovery_image="$(find "$output_dir" -maxdepth 1 -type f -name '*askey_sbe1v1k*s
 [[ -n "$recovery_image" ]] || die "build finished without the expected SBE1V1K recovery image"
 
 log "Verifying OpenWrt 25.10 APK packages"
-package_dir="$output_dir/packages"
+package_dir="$OUTPUT_ROOT/packages"
 [[ -d "$package_dir" ]] || die "build finished without the APK package directory: $package_dir"
 mapfile -t apk_packages < <(find "$package_dir" -type f -name '*.apk' -print | sort)
 (( ${#apk_packages[@]} > 0 )) || die "build finished without any .apk packages in $package_dir"

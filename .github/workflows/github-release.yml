@@ -40,6 +40,7 @@ jobs:
     timeout-minutes: 360
     env:
       OUTPUT_DIR: ${{ github.workspace }}/out/targets/qualcommbe/ipq95xx
+      PACKAGE_ROOT: ${{ github.workspace }}/out/packages
       RELEASE_DIR: ${{ github.workspace }}/release
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
     steps:
@@ -84,17 +85,16 @@ jobs:
       - name: Verify OpenWrt 25.10 APK packages
         run: |
           set -Eeuo pipefail
-          package_root="$OUTPUT_DIR/packages"
-          [[ -d "$package_root" ]] || {
-            printf 'Missing APK package directory: %s\n' "$package_root" >&2
+          [[ -d "$PACKAGE_ROOT" ]] || {
+            printf 'Missing APK package directory: %s\n' "$PACKAGE_ROOT" >&2
             exit 1
           }
-          mapfile -t apk_packages < <(find "$package_root" -type f -name '*.apk' | sort)
+          mapfile -t apk_packages < <(find "$PACKAGE_ROOT" -type f -name '*.apk' | sort)
           ((${#apk_packages[@]} > 0)) || {
-            printf 'No .apk packages were produced under %s\n' "$package_root" >&2
+            printf 'No .apk packages were produced under %s\n' "$PACKAGE_ROOT" >&2
             exit 1
           }
-          ipk_package="$(find "$package_root" -type f -name '*.ipk' -print -quit)"
+          ipk_package="$(find "$PACKAGE_ROOT" -type f -name '*.ipk' -print -quit)"
           if [[ -n "$ipk_package" ]]; then
             printf 'OpenWrt 25.10 APK mode produced an unexpected .ipk package\n' >&2
             exit 1
@@ -104,13 +104,13 @@ jobs:
             luci-app-sbe1v1k-diag \
             luci-app-sbe1v1k-netmode \
             luci-theme-argon; do
-            package_file="$(find "$package_root" -type f -name "${package_name}*.apk" -print -quit)"
+            package_file="$(find "$PACKAGE_ROOT" -type f -name "${package_name}*.apk" -print -quit)"
             [[ -n "$package_file" ]] || {
               printf 'Missing expected APK package: %s\n' "$package_name" >&2
               exit 1
             }
           done
-          printf 'Verified %d APK packages under %s\n' "${#apk_packages[@]}" "$package_root"
+          printf 'Verified %d APK packages under %s\n' "${#apk_packages[@]}" "$PACKAGE_ROOT"
 
       - name: Collect release assets
         run: |
