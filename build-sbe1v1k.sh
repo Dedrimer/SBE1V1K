@@ -342,6 +342,16 @@ recovery_image="$(find "$output_dir" -maxdepth 1 -type f -name '*askey_sbe1v1k*s
 [[ -n "$initramfs_image" ]] || die "build finished without the expected SBE1V1K initramfs image"
 [[ -n "$recovery_image" ]] || die "build finished without the expected SBE1V1K recovery image"
 
+log "Writing reproducible build metadata"
+cp -v .config "$output_dir/config.buildinfo"
+./scripts/feeds list -s > "$output_dir/feeds.buildinfo"
+{
+	printf 'SOURCE_COMMIT=%s\n' "$(git rev-parse HEAD)"
+	printf 'SOURCE_DIR=%s\n' "$SOURCE_DIR"
+	printf 'BUILD_STARTED_AT=%s\n' "$BUILD_STARTED_AT"
+	printf 'BUILD_FINISHED_AT=%s\n' "$BUILD_FINISHED_AT"
+} > "$output_dir/version.buildinfo"
+
 log "Verifying OpenWrt 25.10 APK packages"
 package_dir="$OUTPUT_ROOT/packages"
 [[ -d "$package_dir" ]] || die "build finished without the APK package directory: $package_dir"
