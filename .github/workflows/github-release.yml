@@ -1,24 +1,123 @@
-name: Create GitHub release
-
-permissions:
-  contents: write
+name: Build and publish SBE1V1K release
 
 on:
   push:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      jobs:
+        description: "Parallel make jobs"
+        required: false
+        type: number
+        default: 4
+      clean:
+        description: "Run make dirclean before configuring"
+        required: false
+        type: boolean
+        default: true
+      retry_serial:
+        description: "Retry a failed parallel build with -j1 V=s"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
-
+  build:
+    name: Build SBE1V1K firmware
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
     steps:
-      - name: Checkout
+      - name: Check out source
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
-      - name: Release
+      - name: Show host information
+        run: |
+          set -euxo pipefail
+          uname -a
+          printf 'Architecture: '; uname -m
+          printf 'CPU cores: '; nproc
+          printf 'Disk:\n'; df -h
+
+      - name: Build firmware
+        env:
+          BUILD_JOBS: ${{ inputs.jobs || 4 }}
+          BUILD_CLEAN: ${{ inputs.clean }}
+          BUILD_RETRY_SERIAL: ${{ inputs.retry_serial }}
+        run: |
+          set -euxo pipefail
+          args=(--jobs "$BUILD_JOBS")
+          if [[ "$BUILD_CLEAN" != false ]]; then
+            args+=(--clean)
+          fi
+          if [[ "$BUILD_RETRY_SERIAL" == false ]]; then
+            args+=(--no-retry)
+          fi
+          bash ./build-sbe1v1k.sh "${args[@]}"
+
+      - name: Prepare release assets
+        run: |
+          set -euxo pipefail
+          output_dir="$GITHUB_WORKSPACE/out/targets/qualcommbe/ipq95xx"
+          release_dir="$GITHUB_WORKSPACE/release"
+          mkdir -p "$release_dir"
+          find "$output_dir" -maxdepth 1 -type f \
+            \( -name '*askey_sbe1v1k*squashfs-sysupgrade.bin' \
+            -o -name '*askey_sbe1v1k*initramfs-uImage.itb' \
+            -o -name '*askey_sbe1v1k*squashfs-recovery.bin' \) \
+            -exec cp -v {} "$release_dir/" \;
+          compgen -G "$release_dir/*askey_sbe1v1k*" >/dev/null
+          sha256sum "$release_dir"/*askey_sbe1v1k* > "$release_dir/SHA256SUMS"
+          cp -v out/build-time.txt "$release_dir/"
+          ls -lh "$release_dir"
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbe1v1k-release-assets
+          path: release/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build logs and output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbe1v1k-build-${{ github.run_number }}
+          if-no-files-found: warn
+          retention-days: 14
+          include-hidden-files: true
+          path: |
+            .build-logs/
+            out/
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: sbe1v1k-release-assets
+          path: release
+
+      - name: Publish release
         uses: softprops/action-gh-release@v3
         with:
-          draft: true
-          prerelease: true
+          tag_name: ${{ github.ref_name }}
+          name: SBE1V1K OpenWrt ${{ github.ref_name }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          files: release/*

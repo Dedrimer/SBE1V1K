@@ -255,16 +255,6 @@ printf 'Available disk space: '; df -h "$SOURCE_DIR" | awk 'NR == 2 { print $4 }
 log "Updating and installing locked OpenWrt feeds"
 ./scripts/feeds update -a
 
-istore_makefile="$SOURCE_DIR/feeds/istore/luci/luci-app-store/Makefile"
-istore_patch="$SOURCE_DIR/config/istore-openwrt-main.patch"
-legacy_istore_dependency="LUCI_DEPENDS+=\$(if \$(CONFIG_USE_APK)"
-[[ -f "$istore_makefile" ]] || die "the locked iStore source was not downloaded"
-if grep -Fq "$legacy_istore_dependency" "$istore_makefile"; then
-	patch --batch --forward -d "$SOURCE_DIR/feeds/istore" -p1 < "$istore_patch"
-elif ! grep -Fq '+USE_APK:luci-compat' "$istore_makefile"; then
-	die "the locked iStore source does not match the expected dependency format"
-fi
-
 luci_wireless="$SOURCE_DIR/feeds/luci/modules/luci-mod-network/htdocs/luci-static/resources/view/network/wireless.js"
 luci_wireless_patch="$SOURCE_DIR/config/luci-sbe1v1k-wireless-global-toggle.patch"
 [[ -f "$luci_wireless" ]] || die "the locked LuCI wireless view was not downloaded"

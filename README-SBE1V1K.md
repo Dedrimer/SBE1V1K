@@ -31,8 +31,8 @@ bash ./build-sbe1v1k.sh
 ```
 
 可用 `bash ./build-sbe1v1k.sh --help` 查看并行数、清理构建和仅下载等选项。脚本会继承
-`HTTP_PROXY`、`HTTPS_PROXY` 等标准代理环境变量。固件默认使用 Argon 主题并预置
-iStore、LuCI 软件包管理器、SBE1V1K 诊断与网络模式页面，以及 Docker Engine/CLI；
+`HTTP_PROXY`、`HTTPS_PROXY` 等标准代理环境变量。固件默认使用 Argon 主题并包含
+LuCI 软件包管理器、SBE1V1K 诊断与网络模式页面，以及 Docker Engine/CLI；
 不预置 Dockerman、Aria2、Samba、SmartDNS、广告过滤、流量统计、SQM、DDNS、UPnP
 和 WireGuard。所有 feeds 与第三方界面源码均固定到精确提交以便复现构建，其中 Docker
 固定为 29.6.1，LuCI 来自 2026-08-15 刷新的官方 feed。
@@ -80,7 +80,6 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 cp configs/sbe1v1k.config .config
 ./scripts/feeds update -a
-patch --batch --forward -d feeds/istore -p1 < config/istore-openwrt-main.patch
 patch --batch --forward -d feeds/luci -p1 < config/luci-sbe1v1k-wireless-global-toggle.patch
 ./scripts/feeds install -a
 mkdir -p feeds/argon
