@@ -84,9 +84,11 @@ return baseclass.extend({
 			return table;
 		}
 
-		addRow(table, _('驱动状态'), status.module_loaded
-			? badge(status.healthy ? 'success' : 'warning', status.healthy ? _('工作正常') : _('已加载，状态异常'))
-			: badge('important', _('ath12k 未加载')));
+		addRow(table, _('驱动状态'), status.working
+			? badge('success', _('已加载并正常工作'))
+			: status.driver_loaded
+				? badge('warning', _('已加载但工作异常'))
+				: badge('important', _('ath12k 未加载')));
 		addRow(table, _('三频 radio'), badge(status.detected === 3 ? 'success' : 'important',
 			_('%d / 3 已检测').format(Number(status.detected || 0))));
 		addRow(table, _('频段状态'), E('div', {

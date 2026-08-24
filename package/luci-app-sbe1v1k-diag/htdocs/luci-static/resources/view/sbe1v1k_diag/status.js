@@ -66,6 +66,57 @@ function fmtNum(n)
 	return (n == null) ? '-' : String(n);
 }
 
+function fmtBytes(bytes)
+{
+	if (bytes == null || bytes < 0)
+		return '-';
+
+	var units = [ 'B', 'KiB', 'MiB', 'GiB', 'TiB' ];
+	var value = Number(bytes);
+	var index = 0;
+
+	while (value >= 1024 && index < units.length - 1) {
+		value /= 1024;
+		index++;
+	}
+
+	return (index === 0 ? String(Math.round(value)) : value.toFixed(2)) + ' ' + units[index];
+}
+
+function ath12kSummary(status)
+{
+	status = status || {};
+
+	if (status.working)
+		return statusBadge(true, _('已加载并正常工作'));
+	if (status.driver_loaded)
+		return statusBadge(false, _('已加载但工作异常'));
+
+	return statusBadge(false, _('ath12k 未加载'));
+}
+
+function emmcSection(emmc)
+{
+	if (!emmc || !emmc.present)
+		return E('div', { 'class': 'sbe1v1k-missing' }, [ _('未检测到 eMMC') ]);
+
+	var life = emmc.life_time || {};
+	var pre = emmc.pre_eol || {};
+	var preOk = pre.value === 1;
+
+	return kvRows([
+		[ _('设备'), plain(emmc.block || '-') ],
+		[ _('型号'), plain(emmc.model || '-') ],
+		[ _('容量'), fmtBytes(emmc.capacity_bytes) ],
+		[ _('寿命估计 A'), life.a_label || plain(life.raw || '-') ],
+		[ _('寿命估计 B'), life.b_label || plain(life.raw || '-') ],
+		[ _('预 EOL 状态'), pre.value == null ? statusBadge(false, _('不可用')) : statusBadge(preOk, pre.label || '-') ],
+		[ _('固件/硬件版本'), plain(emmc.firmware || '-') + ' / ' + plain(emmc.hardware || '-') ],
+		[ _('序列号'), plain(emmc.serial || '-') ],
+		[ _('CID'), plain(emmc.cid || '-') ]
+	]);
+}
+
 function fmtUptime(sec)
 {
 	if (sec == null)
@@ -391,6 +442,8 @@ return view.extend({
 		var eip = d.eip || {};
 		var ppe = d.ppe || {};
 		var abi = d.abi || {};
+		var ath = d.ath12k_status || {};
+		var emmc = d.emmc || {};
 
 		var offload = fw.flow_offloading_hw === '1'
 			? statusBadge(true, _('硬件卸载已启用'))
@@ -405,6 +458,12 @@ return view.extend({
 			E('style', {}, [ SBE1V1K_CSS ]),
 			E('div', { 'class': 'cbi-map' }, [
 				E('h2', {}, [ _('概览') ]),
+				section(_('关键状态'), kvRows([
+					[ _('ath12k 驱动'), ath12kSummary(ath) ],
+					[ _('ath12k radio'), fmtNum(ath.detected) + ' / 3 ' + _('已检测，') + fmtNum(ath.running) + ' / ' + fmtNum(ath.enabled) + ' ' + _('运行中') ],
+					[ _('eMMC 寿命'), emmc.present ? statusBadge(emmc.pre_eol && emmc.pre_eol.value === 1, emmc.pre_eol ? emmc.pre_eol.label : _('不可用')) : statusBadge(false, _('未检测到')) ]
+				])),
+				section(_('eMMC 健康'), emmcSection(emmc)),
 				section(_('设备'), kvRows([
 					[ _('型号'), plain(d.model || 'unknown').trim() ],
 					[ _('运行时间'), plain(d.uptime ? fmtUptime(d.uptime.up) : '-') ],

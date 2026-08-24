@@ -620,7 +620,7 @@ function collect_ath12k_status()
 {
 	let cu = cursor();
 	let ubus = connect();
-	let runtime = ubus.call('network.wireless', 'status', {});
+	let runtime = ubus != null ? ubus.call('network.wireless', 'status', {}) : null;
 	let configured = {};
 	let physical = {};
 	let bands = [];
@@ -691,10 +691,15 @@ function collect_ath12k_status()
 	let debugfs_devices = glob('/sys/kernel/debug/ath12k/*') ?? [];
 	let dp_stats = glob('/sys/kernel/debug/ath12k/*/device_dp_stats') ?? [];
 	let module_loaded = stat('/sys/module/ath12k') != null;
+	let driver_loaded = module_loaded || detected > 0;
+	let working = driver_loaded && detected == 3 && configured_count == 3 &&
+		enabled == 3 && running == 3 && failed == 0;
 
 	return {
 		module_loaded,
-		healthy: module_loaded && detected == 3 && configured_count == 3 && failed == 0,
+		driver_loaded,
+		healthy: driver_loaded && detected == 3 && configured_count == 3 && failed == 0,
+		working,
 		detected,
 		configured: configured_count,
 		enabled,
@@ -703,6 +708,98 @@ function collect_ath12k_status()
 		dp_stats: length(dp_stats),
 		bands
 	};
+}
+
+function parse_hex_values(text)
+{
+	let out = [];
+
+	for (let value in (match(text ?? '', /(0x[0-9a-fA-F]+|[0-9]+)/g) ?? [])) {
+		let token = value[1];
+		push(out, match(token, /^0x/i) != null ? int(substr(token, 2), 16) : int(token));
+	}
+
+	return out;
+}
+
+function emmc_life_label(value)
+{
+	if (value == null || value == 0)
+		return '不可用';
+	if (value == 1)
+		return '0-10%';
+	if (value >= 2 && value <= 10)
+		return ((value - 1) * 10) + '-' + (value * 10) + '%';
+	if (value == 11)
+		return '超过预期寿命';
+
+	return '未知值 ' + value;
+}
+
+function emmc_pre_eol_label(value)
+{
+	if (value == 1)
+		return '正常';
+	if (value == 2)
+		return '警告';
+	if (value == 3)
+		return '紧急';
+
+	return value == null || value == 0 ? '不可用' : '未知值 ' + value;
+}
+
+function collect_emmc()
+{
+	let block = null;
+	let blocks = glob('/sys/block/mmcblk*') ?? [];
+
+	for (let path in blocks)
+		if (basename(path) == 'mmcblk0') {
+			block = path;
+			break;
+		}
+
+	if (block == null)
+		for (let path in blocks)
+			if (trim(read_text(path + '/device/type', 32) ?? '') == 'MMC') {
+				block = path;
+				break;
+			}
+
+	if (block == null)
+		return { present: false };
+
+	let device = block + '/device';
+	let sectors = read_int(block + '/size');
+	let life = parse_hex_values(read_text(device + '/life_time', 64));
+	let pre_eol = parse_hex_values(read_text(device + '/pre_eol_info', 64));
+	let out = {
+		present: stat(device) != null,
+		block: basename(block),
+		capacity_bytes: sectors != null ? sectors * 512 : null,
+		model: trim(read_text(device + '/name', 128) ?? ''),
+		cid: trim(read_text(device + '/cid', 256) ?? ''),
+		serial: trim(read_text(device + '/serial', 128) ?? ''),
+		firmware: trim(read_text(device + '/fwrev', 128) ?? ''),
+		hardware: trim(read_text(device + '/hwrev', 128) ?? ''),
+		manfid: trim(read_text(device + '/manfid', 128) ?? ''),
+		oemid: trim(read_text(device + '/oemid', 128) ?? ''),
+		date: trim(read_text(device + '/date', 128) ?? ''),
+		life_time: {
+			raw: trim(read_text(device + '/life_time', 64) ?? ''),
+			a: life[0] ?? null,
+			b: life[1] ?? null,
+			a_label: emmc_life_label(life[0]),
+			b_label: emmc_life_label(life[1])
+		},
+		pre_eol: {
+			raw: trim(read_text(device + '/pre_eol_info', 64) ?? ''),
+			value: pre_eol[0] ?? null,
+			label: emmc_pre_eol_label(pre_eol[0])
+		}
+	};
+
+	return out;
 }
 
 function collect()
@@ -834,6 +931,8 @@ function collect()
 	return {
 		generated: time(),
 		model: read_text('/tmp/sysinfo/model'),
+		emmc: collect_emmc(),
+		ath12k_status: collect_ath12k_status(),
 		uptime: { raw: uptime, up: uptime_up },
 		firewall: {
 			flow_offloading: cu.get_first('firewall', 'defaults', 'flow_offloading'),
