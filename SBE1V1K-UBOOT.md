@@ -102,11 +102,30 @@ openwrt-qualcommbe-ipq95xx-askey_sbe1v1k-squashfs-sysupgrade.bin
 
 ## 6. 后续更新
 
-- 更新 OpenWrt：进入 `http_recovery`，Firmware 页面上传 sysupgrade tar。
+- 更新 OpenWrt：`large` 可使用 LuCI 或普通 `sysupgrade` 保留配置升级；HTTP recovery
+  仍作为失败后的恢复路径。
 - 更新 chainloader：Chainloader 页面只上传原始 `sbe1v1k-chainloader.itb`；`mainline` 自动写 `rsvd_2`，`large` 自动写 `chainloader`。
 - HTTP 页面 chainloader 上限为 4 MiB，不能上传 `u-boot.bin`、OpenWrt 固件或 4 MiB padded partition image。
 
-普通 OpenWrt `sysupgrade` 是否适用于第三方 `large` 布局取决于固件中的 platform upgrade 脚本；未实机验证前，`large` 布局只使用该 HTTP recovery 的固件更新路径。
+本仓库的普通 OpenWrt `sysupgrade` 优先支持 `large` 布局：升级前会按 HTTP
+U-Boot 相同的规则核对 `0:HLOS`、`chainloader`、`kernel`、`rootfs`、
+`rootfs_data` 的固定 LBA、容量和镜像成员大小，任一不匹配都会拒绝写盘。
+勾选“保留配置”会通过 `rootfs_data` 迁移 OpenWrt 配置清单，不会原样保留
+旧 APK、内核模块或整个 overlay。写入时最后才提交 kernel；此前失败会保留
+无效 kernel，使 U-Boot 转入 HTTP recovery，而不会改写 U-Boot 或 GPT。
+
+`mainline` 布局已经声明支持 `0:HLOS`、`rootfs`、`rootfs_data`，同样执行边界
+检查，但尚未完成实机升级验证，不能视为可用性保证。
+
+从缺少兼容版本初始化的旧版固件第一次保配置升级前，先确认当前网络配置已经
+使用 `eth0` 到 `eth3`，再执行：
+
+```sh
+uci set system.@system[0].compat_version='1.1'
+uci commit system
+```
+
+不要在仍使用旧 `lan1`/`lan2`/`lan3`/`wan` 设备名时强行修改兼容版本并保留配置。
 
 ## 7. 与上游安装路径的区别
 
@@ -114,6 +133,6 @@ openwrt-qualcommbe-ipq95xx-askey_sbe1v1k-squashfs-sysupgrade.bin
 |---|---:|---:|---|
 | OpenWrt PR #21586：initramfs + `fw_setenv` + `sysupgrade` | 否 | 否 | 最接近上游、最少改动 |
 | HTTP chainloader `mainline` | 会重建/校验 GPT 尾部 | 是，位于 `rsvd_2` | 需要 Web 备份和恢复能力 |
-| HTTP chainloader `large` | 是，大幅改变尾部布局 | 是，独立 `chainloader` 分区 | 实验性大存储布局 |
+| HTTP chainloader `large` | 是，大幅改变尾部布局 | 是，独立 `chainloader` 分区 | 本仓库优先支持的大存储布局 |
 
 无论选择哪条路径，都不要在原厂 U-Boot 中 `saveenv`，不要直接写 `u-boot.bin`，不要把 chainloader 写入 eMMC hardware boot0/boot1。
