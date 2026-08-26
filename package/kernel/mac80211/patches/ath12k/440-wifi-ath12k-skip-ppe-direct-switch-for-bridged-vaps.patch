@@ -1,0 +1,39 @@
+From: Yanghan Ye <yyh94306@gmail.com>
+Subject: [PATCH] wifi: ath12k: skip PPE direct switch for bridged VAPs
+
+The QCN9274 PPE direct-switch path is a routed virtual-port datapath.  It
+does not expose the VAP virtual ports as members of the PPE VSI flood
+bitmaps, so using it for a VAP in a Linux bridge drops DHCP, ARP and other
+unknown/broadcast traffic.  A VAP is commonly added to its bridge before
+the vdev reaches the PPE attach point; leave that VAP on the normal
+mac80211/Linux bridge path and keep direct switching available for
+standalone routed VAPs.
+
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
+---
+ drivers/net/wireless/ath/ath12k/ppe.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+--- a/drivers/net/wireless/ath/ath12k/ppe.c
++++ b/drivers/net/wireless/ath/ath12k/ppe.c
+@@ -1,6 +1,7 @@
+ // SPDX-License-Identifier: BSD-3-Clause-Clear
+ /* Qualcomm QCN9274 PPE direct-switch support. */
+ 
++#include <linux/if_bridge.h>
+ #include <linux/dma-mapping.h>
+ #include <linux/etherdevice.h>
+ #include <linux/mm.h>
+@@ -1226,6 +1227,10 @@ int ath12k_ppe_ds_vif_attach(struct ath1
+ 	if (!ppe->started || !wdev || !wdev->netdev)
+ 		return 0;
++	/* PPE direct VPs cannot participate in the PPE VSI flood domain.
++	 * Keep bridged VAPs on the software bridge so DHCP and ARP work.
++	 */
++	if (netif_is_bridge_port(wdev->netdev))
++		return 0;
+ 	if (vif->type != NL80211_IFTYPE_AP &&
+ 	    vif->type != NL80211_IFTYPE_STATION)
+ 		return 0;
+-- 
+2.43.0
