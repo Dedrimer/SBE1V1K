@@ -1,0 +1,48 @@
+From: Yanghan Ye <yyh94306@gmail.com>
+Subject: [PATCH] wifi: ath12k: stop PPE peer routing on bridge join
+
+A VAP can be attached to a Linux bridge after its PPE direct-switch VP was
+created.  In that case an already authorized peer could keep the RxOLE
+peer-routing bit set even though the VAP has entered a software L2 flood
+domain.  Clear the firmware route and host search entry before returning
+to the bridge path; teardown still clears the peer mapping through the
+normal disable operation.
+
+Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
+---
+ drivers/net/wireless/ath/ath12k/ppe.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+--- a/drivers/net/wireless/ath/ath12k/ppe.c
++++ b/drivers/net/wireless/ath/ath12k/ppe.c
+@@ -1,6 +1,6 @@
+ // SPDX-License-Identifier: BSD-3-Clause-Clear
+ /* Qualcomm QCN9274 PPE direct-switch support. */
+ 
+ #include <linux/dma-mapping.h>
+ #include <linux/etherdevice.h>
+ #include <linux/mm.h>
+@@ -1430,6 +1431,20 @@ void ath12k_ppe_ds_peer_route(struct ath
++	struct wireless_dev *wdev = ieee80211_vif_to_wdev(vif);
++
+ 	if (!ppe->started || arvif->ppe_vp < 64)
+ 		return;
+ 
++	/* A VAP may join its software bridge after the PPE VP was
++	 * allocated.  Do not leave an authorized peer on the direct
++	 * RxOLE path, which cannot flood the bridge's L2 broadcasts.
++	 */
++	if (enable && wdev && wdev->netdev &&
++	    netif_is_bridge_port(wdev->netdev)) {
++		ath12k_wmi_config_peer_ppeds_routing(ar, arsta->addr,
++						     arvif->vdev_id,
++						     arvif->ppe_vp, false);
++		if (vif->type == NL80211_IFTYPE_STATION)
++			ath12k_hif_write32(ab, ATH12K_PPE_SEARCH_TABLE_BASE +
++				   arvif->ppe_search_idx * 4, 0);
++		return;
++	}
++
+ 	if (vif->type == NL80211_IFTYPE_STATION && track_peer) {
+-- 
+2.43.0
