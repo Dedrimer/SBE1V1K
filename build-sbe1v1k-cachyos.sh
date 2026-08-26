@@ -274,31 +274,33 @@ grep -Fq 'renderSbe1v1kWifiGlobal(), nodes' "$luci_wireless" || \
 
 ./scripts/feeds install -a
 
-argon_source="$SOURCE_DIR/feeds/argon"
-argon_target="$SOURCE_DIR/package/feeds/argon/luci-theme-argon"
-argon_repository="https://github.com/jerrykuku/luci-theme-argon.git"
-argon_commit="136eb5d42f30554e89cc737fd90f503909810660"
-if [[ -d "$argon_source/.git" ]]; then
-	git -C "$argon_source" remote set-url origin "$argon_repository"
+footstrap_checkout="$SOURCE_DIR/feeds/footstrap"
+footstrap_source="$footstrap_checkout/luci-theme-footstrap"
+footstrap_target="$SOURCE_DIR/package/feeds/footstrap/luci-theme-footstrap"
+footstrap_repository="https://github.com/VizzleTF/luci-theme-footstrap.git"
+footstrap_commit="10446af91ffe2ba21b1314f123ec12de58426175"
+if [[ -d "$footstrap_checkout/.git" ]]; then
+	git -C "$footstrap_checkout" remote set-url origin "$footstrap_repository"
 else
-	[[ ! -e "$argon_source" ]] || die "cannot initialize Argon over an existing path: $argon_source"
-	mkdir -p "$argon_source"
-	git -C "$argon_source" init
-	git -C "$argon_source" remote add origin "$argon_repository"
+	[[ ! -e "$footstrap_checkout" ]] || die "cannot initialize Footstrap over an existing path: $footstrap_checkout"
+	mkdir -p "$footstrap_checkout"
+	git -C "$footstrap_checkout" init
+	git -C "$footstrap_checkout" remote add origin "$footstrap_repository"
 fi
-git -C "$argon_source" fetch --depth 1 origin "$argon_commit"
-git -C "$argon_source" checkout --detach --force FETCH_HEAD
-git -C "$argon_source" clean -fdx
-[[ "$(git -C "$argon_source" rev-parse HEAD)" == "$argon_commit" ]] || die "Argon commit verification failed"
-[[ -f "$argon_source/Makefile" ]] || die "the locked Argon source was not downloaded"
-mkdir -p "$(dirname "$argon_target")"
-if [[ -L "$argon_target" ]]; then
-	rm -f -- "$argon_target"
-elif [[ -e "$argon_target" && ! -d "$argon_target" ]]; then
-	die "cannot install Argon over an existing non-symlink path: $argon_target"
+git -C "$footstrap_checkout" fetch --depth 1 origin "$footstrap_commit"
+git -C "$footstrap_checkout" checkout --detach --force FETCH_HEAD
+git -C "$footstrap_checkout" clean -fdx
+[[ "$(git -C "$footstrap_checkout" rev-parse HEAD)" == "$footstrap_commit" ]] || die "Footstrap commit verification failed"
+[[ -f "$footstrap_source/Makefile" ]] || die "the locked Footstrap source was not downloaded"
+mkdir -p "$(dirname "$footstrap_target")"
+if [[ -L "$footstrap_target" ]]; then
+	rm -f -- "$footstrap_target"
+elif [[ -e "$footstrap_target" && ! -d "$footstrap_target" ]]; then
+	die "cannot install Footstrap over an existing non-symlink path: $footstrap_target"
 fi
-mkdir -p "$argon_target"
-rsync -a --delete --exclude=.git/ "$argon_source/" "$argon_target/"
+mkdir -p "$footstrap_target"
+rsync -a --delete --exclude=.git/ "$footstrap_source/" "$footstrap_target/"
+cp "$SOURCE_DIR/config/footstrap-default" "$footstrap_target/root/etc/config/footstrap"
 
 log "Applying the SBE1V1K firmware configuration"
 make CONFIG_BINARY_FOLDER="$OUTPUT_ROOT" defconfig

@@ -31,7 +31,7 @@ bash ./build-sbe1v1k.sh
 ```
 
 可用 `bash ./build-sbe1v1k.sh --help` 查看并行数、清理构建和仅下载等选项。脚本会继承
-`HTTP_PROXY`、`HTTPS_PROXY` 等标准代理环境变量。固件默认使用 Argon 主题并包含
+`HTTP_PROXY`、`HTTPS_PROXY` 等标准代理环境变量。固件默认使用 Footstrap 主题并采用侧边栏布局，包含
 LuCI 软件包管理器、SBE1V1K 诊断与网络模式页面，以及 Docker Engine/CLI；
 不预置 Dockerman、Aria2、Samba、SmartDNS、广告过滤、流量统计、SQM、DDNS、UPnP
 和 WireGuard。所有 feeds 与第三方界面源码均固定到精确提交以便复现构建，其中 Docker
@@ -82,13 +82,14 @@ cp configs/sbe1v1k.config .config
 ./scripts/feeds update -a
 patch --batch --forward -d feeds/luci -p1 < config/luci-sbe1v1k-wireless-global-toggle.patch
 ./scripts/feeds install -a
-mkdir -p feeds/argon
-git -C feeds/argon init
-git -C feeds/argon remote add origin https://github.com/jerrykuku/luci-theme-argon.git
-git -C feeds/argon fetch --depth 1 origin 136eb5d42f30554e89cc737fd90f503909810660
-git -C feeds/argon checkout --detach --force FETCH_HEAD
-mkdir -p package/feeds/argon
-rsync -a --delete --exclude=.git/ feeds/argon/ package/feeds/argon/luci-theme-argon/
+mkdir -p feeds/footstrap
+git -C feeds/footstrap init
+git -C feeds/footstrap remote add origin https://github.com/VizzleTF/luci-theme-footstrap.git
+git -C feeds/footstrap fetch --depth 1 origin 10446af91ffe2ba21b1314f123ec12de58426175
+git -C feeds/footstrap checkout --detach --force FETCH_HEAD
+mkdir -p package/feeds/footstrap
+rsync -a --delete --exclude=.git/ feeds/footstrap/luci-theme-footstrap/ package/feeds/footstrap/luci-theme-footstrap/
+cp config/footstrap-default package/feeds/footstrap/luci-theme-footstrap/root/etc/config/footstrap
 make defconfig
 make download -j"$(nproc)"
 make -j"$(nproc)" world

@@ -103,7 +103,7 @@ jobs:
             luci-app-package-manager \
             luci-app-sbe1v1k-diag \
             luci-app-sbe1v1k-netmode \
-            luci-theme-argon; do
+            luci-theme-footstrap; do
             package_file="$(find "$PACKAGE_ROOT" -type f -name "${package_name}*.apk" -print -quit)"
             [[ -n "$package_file" ]] || {
               printf 'Missing expected APK package: %s\n' "$package_name" >&2

@@ -43,8 +43,8 @@ CONTAINERD_VERSION=2.2.5
 RUNC_VERSION=1.3.6
 
 # Optional LuCI experience packages pinned for reproducible firmware builds.
-ARGON_REPOSITORY=https://github.com/jerrykuku/luci-theme-argon.git
-ARGON_COMMIT=136eb5d42f30554e89cc737fd90f503909810660
+FOOTSTRAP_REPOSITORY=https://github.com/VizzleTF/luci-theme-footstrap.git
+FOOTSTRAP_COMMIT=10446af91ffe2ba21b1314f123ec12de58426175
 LUCI_SBE1V1K_WIRELESS_PATCH=config/luci-sbe1v1k-wireless-global-toggle.patch
 
 # Optional second-stage U-Boot / HTTP recovery. Not an OpenWrt build dependency.
