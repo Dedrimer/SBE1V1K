@@ -15,14 +15,7 @@ Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 
 --- a/drivers/net/wireless/ath/ath12k/ppe.c
 +++ b/drivers/net/wireless/ath/ath12k/ppe.c
-@@ -1,6 +1,6 @@
- // SPDX-License-Identifier: BSD-3-Clause-Clear
- /* Qualcomm QCN9274 PPE direct-switch support. */
- 
- #include <linux/dma-mapping.h>
- #include <linux/etherdevice.h>
- #include <linux/mm.h>
-@@ -1430,6 +1431,20 @@ void ath12k_ppe_ds_peer_route(struct ath
+@@ -1430,4 +1431,21 @@ void ath12k_ppe_ds_peer_route(struct ath
 +	struct wireless_dev *wdev = ieee80211_vif_to_wdev(vif);
 +
  	if (!ppe->started || arvif->ppe_vp < 64)
