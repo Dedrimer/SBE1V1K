@@ -15,7 +15,7 @@ Signed-off-by: OpenWrt developers <openwrt@example.invalid>
 ---
 --- a/drivers/net/ethernet/qualcomm/ppe/ppe_bridge.c
 +++ b/drivers/net/ethernet/qualcomm/ppe/ppe_bridge.c
-@@ -890,7 +890,7 @@ static int ppe_bridge_port_join(struct ppe_bridge *pb,
+@@ -890,6 +890,6 @@ static int ppe_bridge_port_join(struct ppe_bridge *pb,
  	ret = switchdev_bridge_port_offload(dev, dev, pb,
  					    &pb->switchdev_nb,
  					    &pb->switchdev_blocking_nb,
