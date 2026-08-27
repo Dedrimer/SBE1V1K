@@ -1,0 +1,27 @@
+From: OpenWrt developers <openwrt@example.invalid>
+Subject: [PATCH] net: ethernet: qualcomm: keep software flooding with wireless bridge ports
+
+The VLAN-unaware PPE bridge TX flooding optimization submits one broadcast
+copy and asks EDMA to replicate it using a physical-port bitmap. Wireless
+VAPs in br-lan remain software bridge ports and are not represented in that
+bitmap. With a VAP present, the optimization can therefore consume a DHCP
+broadcast without delivering a copy to the physical uplink.
+
+Keep the PPE bridge and unicast offload, but use the normal software bridge
+flooding path for VLAN-unaware bridges so broadcasts and unknown multicasts
+are cloned to every software and hardware port correctly.
+
+Signed-off-by: OpenWrt developers <openwrt@example.invalid>
+---
+--- a/drivers/net/ethernet/qualcomm/ppe/ppe_bridge.c
++++ b/drivers/net/ethernet/qualcomm/ppe/ppe_bridge.c
+@@ -890,7 +890,7 @@ static int ppe_bridge_port_join(struct ppe_bridge *pb,
+ 	ret = switchdev_bridge_port_offload(dev, dev, pb,
+ 					    &pb->switchdev_nb,
+ 					    &pb->switchdev_blocking_nb,
+-					    !vlan_aware, extack);
++					    false, extack);
+ 	if (ret)
+ 		goto err_offload;
+-- 
+2.43.0

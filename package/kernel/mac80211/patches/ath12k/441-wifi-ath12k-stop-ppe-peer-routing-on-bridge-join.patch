@@ -10,17 +10,22 @@ normal disable operation.
 
 Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 ---
- drivers/net/wireless/ath/ath12k/ppe.c | 12 ++++++++++++
- 1 file changed, 12 insertions(+)
+ drivers/net/wireless/ath/ath12k/ppe.c | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
 
 --- a/drivers/net/wireless/ath/ath12k/ppe.c
 +++ b/drivers/net/wireless/ath/ath12k/ppe.c
-@@ -1430,4 +1431,21 @@ void ath12k_ppe_ds_peer_route(struct ath
+@@ -1447,11 +1447,27 @@ void ath12k_ppe_ds_peer_route(struct ath12k *ar,
+ 	struct ieee80211_sta *sta = ath12k_ahsta_to_sta(arsta->ahsta);
+ 	struct ath12k_vif *vlan = arsta->ahsta->ppe_vlan;
+ 	bool track_peer = !sta->mlo || arsta->is_assoc_link;
+ 	int ret, vp = arvif->ppe_vp;
+ 	u32 map = 0;
 +	struct wireless_dev *wdev = ieee80211_vif_to_wdev(vif);
 +
- 	if (!ppe->started || arvif->ppe_vp < 64)
- 		return;
  
+ 	if (!ppe->started)
+ 		return;
 +	/* A VAP may join its software bridge after the PPE VP was
 +	 * allocated.  Do not leave an authorized peer on the direct
 +	 * RxOLE path, which cannot flood the bridge's L2 broadcasts.
@@ -35,7 +40,8 @@ Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
 +				   arvif->ppe_search_idx * 4, 0);
 +		return;
 +	}
-+
- 	if (vif->type == NL80211_IFTYPE_STATION && track_peer) {
+ 
+ 	if (vlan && vif->type == NL80211_IFTYPE_AP &&
+ 	    vlan->ppe_parent == arvif->ahvif) {
 -- 
 2.43.0

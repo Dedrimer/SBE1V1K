@@ -24,7 +24,7 @@ Signed-off-by: Yanghan Ye <yyh94306@gmail.com>
  #include <linux/dma-mapping.h>
  #include <linux/etherdevice.h>
  #include <linux/mm.h>
-@@ -1226,6 +1227,10 @@ int ath12k_ppe_ds_vif_attach(struct ath1
+@@ -1235,5 +1235,10 @@ int ath12k_ppe_ds_vif_attach(struct ath12k_link_vif *arvif)
  	if (!ppe->started || !wdev || !wdev->netdev)
  		return 0;
 +	/* PPE direct VPs cannot participate in the PPE VSI flood domain.
